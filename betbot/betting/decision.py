@@ -120,13 +120,11 @@ class DecisionEngine:
         for threshold, (po, pu) in mp.over_under.items():
             conf = conf_map.get(f"over_under_{threshold}", 0.0)
             for sel, prob in [("over", po), ("under", pu)]:
-                key = f"totals_{threshold}_{'over' if sel == 'over' else 'under'}"
-                res = find_best_odds(odds_history, "totals", key)
-                if res is None:
-                    # Try alternative naming
-                    alt = find_best_odds(odds_history, "totals", f"{threshold}_{sel}")
-                    if alt:
-                        res = alt
+                res = (
+                    find_best_odds(odds_history, "totals", f"{sel}_{threshold}")
+                    or find_best_odds(odds_history, "totals", f"totals_{threshold}_{sel}")
+                    or find_best_odds(odds_history, "totals", f"{threshold}_{sel}")
+                )
                 if res is None:
                     continue
                 best_odds, bookmaker = res
