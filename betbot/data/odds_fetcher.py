@@ -31,6 +31,9 @@ LEAGUE_TO_SPORT_KEY: dict[int, str] = {
     2: "soccer_uefa_champs_league",
     3: "soccer_uefa_europa_league",
     848: "soccer_uefa_europa_conference_league",
+    1: "soccer_fifa_world_cup",
+    4: "soccer_euro_championship",
+    5: "soccer_uefa_nations_league",
 }
 
 

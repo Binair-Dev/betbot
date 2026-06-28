@@ -83,18 +83,15 @@ def get_odds_for_sport(sport_key: str, markets: str = "h2h",
                        commence_time_to: datetime | None = None,
                        bookmakers: str | None = None) -> list[dict]:
     """Fetch odds for a given sport (league). markets is comma-separated."""
-    params: dict[str, Any] = {
-        "sport": sport_key,
-        "regions": regions,
-        "markets": markets,
-    }
+    # v4 endpoint: /sports/{key}/odds  (NOT /odds?sport=key)
+    params: dict[str, Any] = {"regions": regions, "markets": markets}
     if commence_time_from:
         params["commenceTimeFrom"] = commence_time_from.isoformat() + "Z"
     if commence_time_to:
         params["commenceTimeTo"] = commence_time_to.isoformat() + "Z"
     if bookmakers:
         params["bookmakers"] = bookmakers
-    return _request("odds", params=params, ttl=1800) or []
+    return _request(f"sports/{sport_key}/odds", params=params, ttl=1800) or []
 
 
 def get_event_odds(sport_key: str, event_id: str,
