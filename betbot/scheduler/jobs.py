@@ -32,10 +32,45 @@ def job_settle_results() -> None:
     log.info("[JOB 2] Result settlement started at %s", now.isoformat())
     log.info("=" * 60)
     try:
+        _refresh_pending_match_scores()
         from betbot.betting.results import settle_pending_bets
         settle_pending_bets()
     except Exception as exc:
         log.exception("Settlement job failed: %s", exc)
+
+
+def _refresh_pending_match_scores() -> None:
+    """Update match scores/status from football-data.org for all pending bets."""
+    from betbot.data.football_data_org import refresh_match_result
+    from betbot.db.repository import execute, query
+
+    pending = query("""
+        SELECT DISTINCT b.match_id
+        FROM bets b
+        JOIN matches m ON m.match_id = b.match_id
+        WHERE b.status = 'pending'
+          AND m.status NOT IN ('FT', 'CANC', 'PST', 'AET', 'PEN')
+    """)
+    if not pending:
+        return
+
+    log.info("Refreshing scores for %d pending matches", len(pending))
+    for row in pending:
+        mid = row["match_id"]
+        result = refresh_match_result(mid)
+        if not result:
+            log.debug("No result data for match %s", mid)
+            continue
+        execute(
+            """UPDATE matches SET
+               status=?, home_score=?, away_score=?,
+               home_ht_score=?, away_ht_score=?, updated_at=CURRENT_TIMESTAMP
+               WHERE match_id=?""",
+            (result["status"], result["home_score"], result["away_score"],
+             result["home_ht_score"], result["away_ht_score"], mid),
+        )
+        log.info("Match %s → status=%s score=%s-%s",
+                 mid, result["status"], result["home_score"], result["away_score"])
 
 
 def job_recompute_elo() -> None:

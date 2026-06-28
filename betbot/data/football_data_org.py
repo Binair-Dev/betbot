@@ -149,6 +149,38 @@ def _normalize(m: dict) -> dict[str, Any] | None:
     }
 
 
+def refresh_match_result(match_id: int) -> dict[str, Any] | None:
+    """Fetch current status + score for a match. Short-TTL for settlement use."""
+    cache_key = f"fdo:match:{match_id}:result"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    data = _get(f"/matches/{match_id}")
+    if not data:
+        return None
+
+    # v4 API wraps in "match" key when fetching single match
+    m = data.get("match") or (data if data.get("id") else None)
+    if not m:
+        return None
+
+    ft = m.get("score", {}).get("fullTime", {})
+    ht = m.get("score", {}).get("halfTime", {})
+    status_raw = m.get("status", "")
+    result = {
+        "match_id": m["id"],
+        "status": _STATUS_MAP.get(status_raw, status_raw),
+        "home_score": ft.get("home"),
+        "away_score": ft.get("away"),
+        "home_ht_score": ht.get("home"),
+        "away_ht_score": ht.get("away"),
+    }
+    ttl = 3600 if status_raw == "FINISHED" else 120
+    cache_set(cache_key, "fdo_match_result", result, ttl_seconds=ttl)
+    return result
+
+
 def _season(utc_date: str) -> int:
     try:
         dt = datetime.fromisoformat(utc_date.replace("Z", "+00:00"))
