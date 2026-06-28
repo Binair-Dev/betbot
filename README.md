@@ -79,7 +79,16 @@ Le pari n'est placé que si le modèle détecte un **edge positif** vs les cotes
   - **The Odds API** sur [the-odds-api.com](https://the-odds-api.com/) — gratuit 500 req/mois
   - **OpenWeatherMap** — gratuit 1000 req/jour
 
-> 💡 **Le setup initial ne consomme AUCUN crédit API** — on utilise [football-data.co.uk](https://www.football-data.co.uk/) (CSV publics gratuits, 4 saisons, ~19 000 matchs).
+### Authentification dashboard
+
+Les identifiants sont lus depuis l'environnement (`.env` ou variables Docker). Modifie dans `.env` :
+
+```bash
+DASHBOARD_USER=ton_user
+DASHBOARD_PASSWORD=ton_mot_de_passe
+```
+
+Puis `docker compose restart dashboard`. Les valeurs par défaut (`admin` / `changeme`) ne sont utilisées que si ces variables ne sont pas définies.
 
 ### Installation
 
@@ -104,7 +113,7 @@ docker compose logs -f bot
 
 ### URLs
 
-- **Dashboard** : http://localhost:8501 (login: `admin` / `changeme`)
+- **Dashboard** : http://localhost:8501 (login : valeurs de `DASHBOARD_USER` / `DASHBOARD_PASSWORD` dans `.env`)
 
 ### CLI
 
