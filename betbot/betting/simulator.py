@@ -70,6 +70,17 @@ def place_bet(match_id: int, market: str, selection: str, odds: float,
     return bet_id
 
 
+def void_bet(bet_id: int, stake: float) -> None:
+    """Void a bet (push / draw-no-bet draw) — refund the stake."""
+    execute(
+        """UPDATE bets SET status='void', payout=?, profit=0, settled_at=CURRENT_TIMESTAMP
+           WHERE id=?""",
+        (stake, bet_id),
+    )
+    update_bankroll(stake, "bet_settled", bet_id=bet_id, notes="void")
+    log.info("Bet %s voided — stake %.2f€ refunded", bet_id, stake)
+
+
 def settle_bet(bet_id: int, won: bool, odds: float, stake: float) -> None:
     """Settle a bet: mark won/lost and update bankroll."""
     if won:

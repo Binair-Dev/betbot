@@ -92,17 +92,20 @@ class Settings:
     # Feature weights (must sum to 1.0)
     FEATURE_WEIGHTS: dict[str, float] = field(
         default_factory=lambda: {
-            "xg_form": 0.20,
+            "xg_form": 0.18,
             "elo": 0.15,
             "odds_value": 0.20,
             "injuries": 0.12,
-            "context": 0.10,
+            "context": 0.08,
             "weather": 0.03,
             "referee": 0.03,
-            "fatigue": 0.05,
+            "fatigue": 0.04,
             "odds_movement": 0.05,
             "market_bias": 0.04,
             "players": 0.03,
+            "styles": 0.03,
+            "setpieces": 0.01,
+            "soft_factors": 0.01,
         }
     )
 

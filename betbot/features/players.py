@@ -6,6 +6,7 @@ players + line-up availability.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from betbot.data.api_football import get_fixture_lineups
@@ -28,11 +29,12 @@ class PlayersFeature(Feature):
             return FeatureResult(delta=(0.0, 0.0, 0.0), confidence=0.0,
                                  raw={"reason": "no match_id"}, missing=True)
 
-        try:
-            lineups = get_fixture_lineups(match_id)
-        except Exception as exc:
-            log.warning("Lineups fetch failed for %s: %s", match_id, exc)
-            lineups = []
+        lineups = []
+        if _match_within_hours(match.get("match_date"), hours=2):
+            try:
+                lineups = get_fixture_lineups(match_id)
+            except Exception as exc:
+                log.warning("Lineups fetch failed for %s: %s", match_id, exc)
 
         home_quality = away_quality = 0.0
         home_n = away_n = 0
@@ -92,3 +94,19 @@ class PlayersFeature(Feature):
                 "away_xi_count": quality_map["away_n"],
             },
         )
+
+
+def _match_within_hours(match_date: str | datetime | None, hours: float) -> bool:
+    """Return True if the match kicks off within `hours` from now."""
+    if not match_date:
+        return False
+    try:
+        if isinstance(match_date, str):
+            dt = datetime.fromisoformat(match_date.replace("Z", "+00:00"))
+        else:
+            dt = match_date
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (dt - datetime.now(timezone.utc)).total_seconds() <= hours * 3600
+    except (ValueError, TypeError):
+        return False

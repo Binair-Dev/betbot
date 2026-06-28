@@ -63,17 +63,78 @@ class RefereeFeature(Feature):
 # This is a small curated set; we'll grow it over time.
 # ----------------------------------------------------------------------------
 _REFEREE_DATABASE: dict[str, dict[str, float]] = {
-    # name (lowercase): stats
+    # Premier League
     "anthony taylor": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.28, "fouls_per_match": 22.1},
     "michael oliver": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.32, "fouls_per_match": 23.4},
     "martin atkinson": {"yellow_cards_per_match": 3.5, "penalties_per_match": 0.25, "fouls_per_match": 21.0},
     "andrew madley": {"yellow_cards_per_match": 4.5, "penalties_per_match": 0.22, "fouls_per_match": 24.0},
-    "simon marciniak": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
-    "daniel orsato": {"yellow_cards_per_match": 4.7, "penalties_per_match": 0.35, "fouls_per_match": 24.5},
+    "stuart attwell": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
+    "chris kavanagh": {"yellow_cards_per_match": 4.3, "penalties_per_match": 0.27, "fouls_per_match": 23.0},
+    "paul tierney": {"yellow_cards_per_match": 3.9, "penalties_per_match": 0.24, "fouls_per_match": 21.8},
+    "darren england": {"yellow_cards_per_match": 4.1, "penalties_per_match": 0.26, "fouls_per_match": 22.3},
+    "john brooks": {"yellow_cards_per_match": 3.7, "penalties_per_match": 0.23, "fouls_per_match": 21.5},
+    "simon hooper": {"yellow_cards_per_match": 4.4, "penalties_per_match": 0.29, "fouls_per_match": 23.5},
+    "robert jones": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.25, "fouls_per_match": 22.0},
+    # Ligue 1
+    "francois letexier": {"yellow_cards_per_match": 3.5, "penalties_per_match": 0.24, "fouls_per_match": 20.8},
+    "clement turpin": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.28, "fouls_per_match": 22.0},
+    "benoit bastien": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.26, "fouls_per_match": 22.5},
+    "ruddy buquet": {"yellow_cards_per_match": 4.5, "penalties_per_match": 0.30, "fouls_per_match": 23.0},
+    "johan hamel": {"yellow_cards_per_match": 4.3, "penalties_per_match": 0.27, "fouls_per_match": 22.8},
+    "eric wattellier": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.22, "fouls_per_match": 21.0},
+    "florent batta": {"yellow_cards_per_match": 4.1, "penalties_per_match": 0.25, "fouls_per_match": 22.2},
+    # Bundesliga
     "felix zwayer": {"yellow_cards_per_match": 3.6, "penalties_per_match": 0.27, "fouls_per_match": 21.5},
-    "szymon marciniak": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
+    "tobias stieler": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.25, "fouls_per_match": 22.0},
+    "daniel siebert": {"yellow_cards_per_match": 3.9, "penalties_per_match": 0.28, "fouls_per_match": 21.8},
+    "benjamin brand": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.26, "fouls_per_match": 22.5},
+    "robert schroder": {"yellow_cards_per_match": 3.7, "penalties_per_match": 0.24, "fouls_per_match": 21.2},
+    "christian dingert": {"yellow_cards_per_match": 4.1, "penalties_per_match": 0.23, "fouls_per_match": 22.0},
+    "sascha stegemann": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.26, "fouls_per_match": 21.5},
+    # Serie A
+    "daniele orsato": {"yellow_cards_per_match": 4.7, "penalties_per_match": 0.35, "fouls_per_match": 24.5},
+    "daniel orsato": {"yellow_cards_per_match": 4.7, "penalties_per_match": 0.35, "fouls_per_match": 24.5},
+    "massimiliano irrati": {"yellow_cards_per_match": 4.5, "penalties_per_match": 0.32, "fouls_per_match": 23.8},
+    "marco guida": {"yellow_cards_per_match": 4.3, "penalties_per_match": 0.29, "fouls_per_match": 23.0},
+    "paolo valeri": {"yellow_cards_per_match": 4.6, "penalties_per_match": 0.33, "fouls_per_match": 24.0},
+    "luca pairetto": {"yellow_cards_per_match": 4.4, "penalties_per_match": 0.31, "fouls_per_match": 23.5},
+    "fabrizio doveri": {"yellow_cards_per_match": 4.8, "penalties_per_match": 0.34, "fouls_per_match": 25.0},
+    "maurizio mariani": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.28, "fouls_per_match": 22.8},
+    # La Liga
     "antonio mateu lahoz": {"yellow_cards_per_match": 5.5, "penalties_per_match": 0.40, "fouls_per_match": 26.0},
+    "juan martinez munuera": {"yellow_cards_per_match": 4.8, "penalties_per_match": 0.35, "fouls_per_match": 24.5},
+    "jesus gil manzano": {"yellow_cards_per_match": 5.0, "penalties_per_match": 0.38, "fouls_per_match": 25.5},
+    "jose maria sanchez martinez": {"yellow_cards_per_match": 4.5, "penalties_per_match": 0.32, "fouls_per_match": 24.0},
+    "ricardo de burgos bengoetxea": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.28, "fouls_per_match": 23.0},
     "cesar ramos": {"yellow_cards_per_match": 4.8, "penalties_per_match": 0.33, "fouls_per_match": 24.0},
+    "alejandro hernandez hernandez": {"yellow_cards_per_match": 4.4, "penalties_per_match": 0.30, "fouls_per_match": 23.5},
+    "guillermo cuadra fernandez": {"yellow_cards_per_match": 4.6, "penalties_per_match": 0.31, "fouls_per_match": 24.2},
+    # Eredivisie
+    "serdar gozubuyuk": {"yellow_cards_per_match": 3.5, "penalties_per_match": 0.28, "fouls_per_match": 21.0},
+    "dennis higler": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.25, "fouls_per_match": 21.5},
+    "bas nijhuis": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.0},
+    "jochem kamphuis": {"yellow_cards_per_match": 3.6, "penalties_per_match": 0.22, "fouls_per_match": 20.8},
+    "pol van boekel": {"yellow_cards_per_match": 3.9, "penalties_per_match": 0.26, "fouls_per_match": 21.5},
+    # Liga Portugal
+    "artur soares dias": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.29, "fouls_per_match": 22.5},
+    "hugo miguel": {"yellow_cards_per_match": 4.3, "penalties_per_match": 0.31, "fouls_per_match": 23.0},
+    "manuel mota": {"yellow_cards_per_match": 4.1, "penalties_per_match": 0.27, "fouls_per_match": 22.0},
+    "luis godinho": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.28, "fouls_per_match": 22.5},
+    # Jupiler Pro League (Belgium)
+    "lawrence visser": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.28, "fouls_per_match": 22.0},
+    "jonathan lardot": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.25, "fouls_per_match": 21.5},
+    "erik lambrechts": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
+    "nathan verboomen": {"yellow_cards_per_match": 3.9, "penalties_per_match": 0.27, "fouls_per_match": 22.0},
+    # UEFA / International
+    "szymon marciniak": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
+    "simon marciniak": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.30, "fouls_per_match": 22.5},
+    "slavko vincic": {"yellow_cards_per_match": 4.2, "penalties_per_match": 0.30, "fouls_per_match": 22.8},
+    "istvan kovacs": {"yellow_cards_per_match": 4.0, "penalties_per_match": 0.27, "fouls_per_match": 22.0},
+    "carlos del cerro grande": {"yellow_cards_per_match": 4.3, "penalties_per_match": 0.31, "fouls_per_match": 23.2},
+    "sandro scharer": {"yellow_cards_per_match": 3.8, "penalties_per_match": 0.26, "fouls_per_match": 21.5},
+    "cuneyt cakir": {"yellow_cards_per_match": 4.5, "penalties_per_match": 0.33, "fouls_per_match": 23.5},
+    "michael fabbri": {"yellow_cards_per_match": 4.1, "penalties_per_match": 0.28, "fouls_per_match": 22.3},
+    "tobias welz": {"yellow_cards_per_match": 3.9, "penalties_per_match": 0.25, "fouls_per_match": 21.8},
 }
 
 

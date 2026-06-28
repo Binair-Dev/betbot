@@ -106,11 +106,15 @@ class MLModel:
             probs = self.model.predict_proba(x_scaled)[0]
             sorted_probs = sorted(probs, reverse=True)
             confidence = sorted_probs[0] - sorted_probs[1]
+            classes = list(self.model.classes_)
+            p_home = float(probs[classes.index(2)])
+            p_draw = float(probs[classes.index(1)])
+            p_away = float(probs[classes.index(0)])
             return MLPrediction(
                 match_id=int(features.get("match_id", 0)),
-                p_home=float(probs[2]),  # class order: 0=away, 1=draw, 2=home
-                p_draw=float(probs[1]),
-                p_away=float(probs[0]),
+                p_home=p_home,
+                p_draw=p_draw,
+                p_away=p_away,
                 confidence=float(confidence),
                 available=True,
             )

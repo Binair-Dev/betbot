@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from betbot.betting.simulator import settle_bet
+from betbot.betting.simulator import settle_bet, void_bet
 from betbot.data.api_football import get_fixture_by_id
 from betbot.db.repository import execute, query, query_one
 from betbot.logging_setup import get_logger
@@ -39,7 +39,10 @@ def settle_pending_bets() -> int:
     for r in rows:
         won = _outcome_matches(r["market"], r["selection"],
                                r["home_score"], r["away_score"])
-        settle_bet(r["bet_id"], won, r["odds"], r["stake"])
+        if won is None:
+            void_bet(r["bet_id"], r["stake"])
+        else:
+            settle_bet(r["bet_id"], won, r["odds"], r["stake"])
         count += 1
     log.info("Settled %d bets", count)
     return count
@@ -61,14 +64,16 @@ def settle_pending_bets_dry_run() -> dict[str, int]:
     for r in rows:
         won = _outcome_matches(r["market"], r["selection"],
                                r["home_score"], r["away_score"])
-        if won:
+        if won is None:
+            summary["void"] += 1
+        elif won:
             summary["won"] += 1
         else:
             summary["lost"] += 1
     return summary
 
 
-def _outcome_matches(market: str, selection: str, home: int, away: int) -> bool:
+def _outcome_matches(market: str, selection: str, home: int, away: int) -> bool | None:
     """Determine if a bet wins given the actual score."""
     if market == "1X2":
         if selection == "home":
@@ -109,7 +114,7 @@ def _outcome_matches(market: str, selection: str, home: int, away: int) -> bool:
     elif market == "draw_no_bet":
         # selection: "dnb_home" / "dnb_away"
         if home == away:
-            return False  # push → void
+            return None  # push → void, stake refunded
         if selection == "dnb_home":
             return home > away
         if selection == "dnb_away":

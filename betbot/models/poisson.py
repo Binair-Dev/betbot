@@ -54,7 +54,6 @@ def team_ratings_from_xg(xg_for_per_match: float, xga_per_match: float,
     The split is approximate: a team's overall attacking output is used as
     attack rating; defensive output vs league average gives defense rating.
     """
-    overall_xg = (xg_for_per_match + (league_avg_home + league_avg_away) / 2) / 2
     attack = max(0.4, min(2.5, xg_for_per_match / max(0.5, (league_avg_home + league_avg_away) / 2)))
     defense = max(0.4, min(2.5, xga_per_match / max(0.5, (league_avg_home + league_avg_away) / 2)))
     return attack, defense, attack, defense
@@ -104,11 +103,6 @@ def _normalize_matrix(mat: list[list[float]]) -> list[list[float]]:
 def prob_outcome_1x2(exp: GoalExpectation, max_goals: int = 8) -> tuple[float, float, float]:
     """Return (P_home, P_draw, P_away)."""
     mat = prob_score_matrix(exp, max_goals)
-    p_home = sum(mat[i][j] for i in range(len(mat)) for j in range(len(mat)) if i > j)
-    p_draw = sum(mat[i][j] for i in range(len(mat)) for j in range(i + 1) if i == j)
-    p_away = sum(mat[i][i] for i in range(len(mat)))
-    # Double count correction: the loop above sums p_draw incorrectly
-    # Let's recompute properly:
     p_home = p_draw = p_away = 0.0
     n = len(mat)
     for i in range(n):
