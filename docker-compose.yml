@@ -26,7 +26,14 @@ services:
     container_name: betbot-dashboard
     env_file:
       - .env
-    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+    working_dir: /app
+    command: >
+      sh -c "streamlit run /app/dashboard/app.py
+             --server.port=8501
+             --server.address=0.0.0.0
+             --server.headless=true
+             --server.runOnSave=false
+             --browser.gatherUsageStats=false"
     ports:
       - "8501:8501"
     volumes:
@@ -34,9 +41,16 @@ services:
       - ./dashboard:/app/dashboard
     environment:
       - PYTHONPATH=/app
+      - HOME=/app
     depends_on:
       - bot
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - betbot-net
 
