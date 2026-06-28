@@ -1,0 +1,29 @@
+{
+  "trained_at": "2026-06-28T11:59:49.887699",
+  "accuracy": 0.5049,
+  "log_loss": 1.0043,
+  "n_train": 18925,
+  "features": [
+    "home_xg_per_match",
+    "away_xg_per_match",
+    "home_xga_per_match",
+    "away_xga_per_match",
+    "home_elo",
+    "away_elo",
+    "elo_diff",
+    "home_form_score",
+    "away_form_score",
+    "home_injuries_penalty",
+    "away_injuries_penalty",
+    "home_rest_days",
+    "away_rest_days",
+    "home_recent_n",
+    "away_recent_n",
+    "odds_home",
+    "odds_draw",
+    "odds_away",
+    "implied_home",
+    "implied_draw",
+    "implied_away"
+  ]
+}

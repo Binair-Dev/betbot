@@ -1,0 +1,45 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: betbot-bot
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/betbot.db').close()"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks:
+      - betbot-net
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: betbot-dashboard
+    env_file:
+      - .env
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./dashboard:/app/dashboard
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      - bot
+    restart: unless-stopped
+    networks:
+      - betbot-net
+
+networks:
+  betbot-net:
+    driver: bridge
