@@ -100,6 +100,27 @@ def _upsert_fixture(fx: dict) -> None:
             away_ht_score=excluded.away_ht_score,
             updated_at=CURRENT_TIMESTAMP
     """
+    # League + teams must exist before match (FK constraints) — upsert first
+    if league.get("id"):
+        execute(
+            """INSERT INTO leagues (league_id, name, country, type)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(league_id) DO UPDATE SET
+                   name=excluded.name""",
+            (league["id"], league.get("name", ""), league.get("country"), league.get("type")),
+        )
+    for team in (home, away):
+        if team.get("id"):
+            execute(
+                """INSERT INTO teams (team_id, name, country, logo_url)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(team_id) DO UPDATE SET
+                       name=excluded.name,
+                       country=excluded.country,
+                       logo_url=excluded.logo_url""",
+                (team["id"], team.get("name"), team.get("country"), team.get("logo")),
+            )
+
     execute(sql, (
         match_id,
         league.get("id"),
@@ -115,27 +136,6 @@ def _upsert_fixture(fx: dict) -> None:
         (score.get("halftime") or {}).get("home"),
         (score.get("halftime") or {}).get("away"),
     ))
-
-    if home.get("id"):
-        execute(
-            """INSERT INTO teams (team_id, name, country, logo_url)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(team_id) DO UPDATE SET
-                   name=excluded.name,
-                   country=excluded.country,
-                   logo_url=excluded.logo_url""",
-            (home["id"], home.get("name"), home.get("country"), home.get("logo")),
-        )
-    if away.get("id"):
-        execute(
-            """INSERT INTO teams (team_id, name, country, logo_url)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(team_id) DO UPDATE SET
-                   name=excluded.name,
-                   country=excluded.country,
-                   logo_url=excluded.logo_url""",
-            (away["id"], away.get("name"), away.get("country"), away.get("logo")),
-        )
 
 
 def _upsert_team_xg(team_xg: dict, season: int) -> None:

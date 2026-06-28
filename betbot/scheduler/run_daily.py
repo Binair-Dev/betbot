@@ -213,10 +213,15 @@ def _process_match(fx: dict, orchestrator: FeatureOrchestrator,
 
 
 def _load_odds_for_match(match_id: int) -> list[dict]:
+    # Best odds per market+selection across all bookmakers (last 24h).
+    # MAX(fetched_at) per-row would miss rows inserted at different seconds
+    # in the same batch — so we group and take best odds instead.
     rows = query(
-        """SELECT bookmaker, market, selection, odds, fetched_at
-           FROM odds_history WHERE match_id = ?
-           AND fetched_at = (SELECT MAX(fetched_at) FROM odds_history WHERE match_id = ?)""",
-        (match_id, match_id),
+        """SELECT bookmaker, market, selection, MAX(odds) AS odds, MAX(fetched_at) AS fetched_at
+           FROM odds_history
+           WHERE match_id = ?
+             AND fetched_at >= datetime('now', '-24 hours')
+           GROUP BY market, selection""",
+        (match_id,),
     )
     return [dict(r) for r in rows]

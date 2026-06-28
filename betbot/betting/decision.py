@@ -141,7 +141,10 @@ class DecisionEngine:
         out = []
         conf = conf_map.get("btts", 0.0)
         for sel, prob in [("yes", mp.btts[0]), ("no", mp.btts[1])]:
-            res = find_best_odds(odds_history, "btts", sel)
+            res = (
+                find_best_odds(odds_history, "btts", f"btts_{sel}")
+                or find_best_odds(odds_history, "btts", sel)
+            )
             if res is None:
                 continue
             best_odds, bookmaker = res
