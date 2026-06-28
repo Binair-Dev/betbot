@@ -51,8 +51,8 @@ class Settings:
     VALUE_THRESHOLD: float = _get_float("VALUE_THRESHOLD", 0.03)
 
     # API keys
+    # API-Football (api-sports.io, official — NOT RapidAPI)
     API_FOOTBALL_KEY: str = _get("API_FOOTBALL_KEY", required=False)
-    API_FOOTBALL_HOST: str = _get("API_FOOTBALL_HOST", "api-football-v1.p.rapidapi.com")
     ODDS_API_KEY: str = _get("ODDS_API_KEY", required=False)
     OPENWEATHER_API_KEY: str = _get("OPENWEATHER_API_KEY", required=False)
 

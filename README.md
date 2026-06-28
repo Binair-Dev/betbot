@@ -75,7 +75,7 @@ Le pari n'est placé que si le modèle détecte un **edge positif** vs les cotes
 ### Prérequis
 - Docker + Docker Compose
 - Clés API (voir `.env.example`) — **uniquement pour le bot en production** :
-  - **API-Football** via [RapidAPI](https://rapidapi.com/api-sports/api/api-football) — gratuit 100 req/jour
+  - **API-Football** sur [dashboard.api-football.com](https://dashboard.api-football.com/register) — site officiel, gratuit 100 req/jour
   - **The Odds API** sur [the-odds-api.com](https://the-odds-api.com/) — gratuit 500 req/mois
   - **OpenWeatherMap** — gratuit 1000 req/jour
 

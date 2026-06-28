@@ -1,4 +1,4 @@
-"""API-Football client (via RapidAPI) — fixtures, stats, injuries, referees, standings."""
+"""API-Football client (api-sports.io direct, official) — fixtures, stats, injuries, referees, standings."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -11,13 +11,14 @@ from betbot.logging_setup import get_logger
 
 log = get_logger(__name__)
 
-BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
+# Official API-Football endpoint (api-sports.io) — NOT RapidAPI.
+# Free tier: https://dashboard.api-football.com/register
+BASE_URL = "https://v3.football.api-sports.io"
 
 
 def _headers() -> dict[str, str]:
     return {
-        "X-RapidAPI-Key": settings.API_FOOTBALL_KEY,
-        "X-RapidAPI-Host": settings.API_FOOTBALL_HOST,
+        "x-apisports-key": settings.API_FOOTBALL_KEY,
     }
 
 
