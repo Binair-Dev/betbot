@@ -51,8 +51,10 @@ class Settings:
     VALUE_THRESHOLD: float = _get_float("VALUE_THRESHOLD", 0.03)
 
     # API keys
-    # API-Football (api-sports.io, official — NOT RapidAPI)
+    # API-Football (api-sports.io) — free tier: seasons 2022-2024 only
     API_FOOTBALL_KEY: str = _get("API_FOOTBALL_KEY", required=False)
+    # football-data.org — free tier: current season, 10 req/min
+    FOOTBALL_DATA_ORG_KEY: str = _get("FOOTBALL_DATA_ORG_KEY", required=False)
     ODDS_API_KEY: str = _get("ODDS_API_KEY", required=False)
     OPENWEATHER_API_KEY: str = _get("OPENWEATHER_API_KEY", required=False)
 

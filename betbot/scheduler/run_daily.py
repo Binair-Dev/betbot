@@ -11,7 +11,8 @@ from betbot.betting.decision import DecisionEngine
 from betbot.betting.simulator import place_bet, record_prediction
 from betbot.betting.value_calc import compute_value
 from betbot.config import settings
-from betbot.data.api_football import get_fixtures_by_date, get_fixture_by_id
+import betbot.data.api_football as _api_football
+import betbot.data.football_data_org as _fdo
 from betbot.data.backfill import _upsert_fixture
 from betbot.data.odds_fetcher import fetch_odds_for_today
 from betbot.db.repository import execute, query
@@ -35,13 +36,12 @@ def run_daily_analysis() -> None:
     tomorrow = today + timedelta(days=1)
 
     # Step 1: fetch fixtures for today and tomorrow
+    # football-data.org covers current season (free). API-Football fallback for paid users.
     fixtures = []
     for d in (today, tomorrow):
-        try:
-            day_fixtures = get_fixtures_by_date(datetime.combine(d, datetime.min.time()))
-            fixtures.extend(day_fixtures)
-        except Exception as exc:
-            log.error("Fixture fetch failed for %s: %s", d, exc)
+        day_dt = datetime.combine(d, datetime.min.time())
+        day_fixtures = _fetch_fixtures(day_dt)
+        fixtures.extend(day_fixtures)
 
     fixtures = [
         fx for fx in fixtures
@@ -86,6 +86,22 @@ def run_daily_analysis() -> None:
 
     log.info("Daily analysis complete: %d matches analyzed, %d bets placed",
              matches_analyzed, matches_bet)
+
+
+def _fetch_fixtures(day_dt: datetime) -> list[dict]:
+    """Try football-data.org first (current season, free), fall back to API-Football."""
+    if settings.FOOTBALL_DATA_ORG_KEY:
+        try:
+            fdo = _fdo.get_fixtures_by_date(day_dt)
+            if fdo is not None:  # empty list is valid (no matches that day)
+                return fdo
+        except Exception as exc:
+            log.warning("football-data.org failed, trying API-Football: %s", exc)
+    try:
+        return _api_football.get_fixtures_by_date(day_dt)
+    except Exception as exc:
+        log.error("All fixture sources failed for %s: %s", day_dt.date(), exc)
+        return []
 
 
 def _process_match(fx: dict, orchestrator: FeatureOrchestrator,

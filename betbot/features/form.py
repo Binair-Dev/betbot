@@ -81,6 +81,16 @@ def _team_form(team_id: int | None, team_name: str, season: int | None,
         except Exception as exc:
             log.warning("get_team_last_fixtures failed for %s: %s", team_name, exc)
 
+    # Fallback: football-data.org (free, current season)
+    if not fixtures and team_id:
+        try:
+            from betbot.data.football_data_org import get_team_recent_matches
+            fixtures = get_team_recent_matches(team_id, limit=last_n)
+            if fixtures:
+                log.debug("form fallback to football-data.org for %s", team_name)
+        except Exception as exc:
+            log.debug("football-data.org form fallback failed for %s: %s", team_name, exc)
+
     if not fixtures and team_name and season:
         xg_data = get_team_xg_by_name(team_name, season)
         if xg_data and xg_data.get("matches"):
@@ -116,9 +126,14 @@ def _team_form(team_id: int | None, team_name: str, season: int | None,
         n += 1
 
     if n > 0:
+        gpm = gf / n
+        gapm = ga / n
         out["matches_count"] = n
-        out["goals_per_match"] = gf / n
-        out["goals_conceded_per_match"] = ga / n
+        out["goals_per_match"] = gpm
+        out["goals_conceded_per_match"] = gapm
+        # Goals used as xG proxy when real xG unavailable
+        out["xg_per_match"] = gpm
+        out["xga_per_match"] = gapm
         out["form_score"] = pts / (3 * n)
         out["missing"] = False
 
