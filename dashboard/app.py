@@ -84,27 +84,30 @@ def main() -> None:
                 try:
                     from betbot.scheduler.jobs import job_analyze_and_bet
                     job_analyze_and_bet()
-                    st.success("Analyse terminée — voir les prédictions du jour.")
+                    st.toast("Analyse terminée — voir les prédictions du jour.")
                 except Exception as exc:
                     st.error(f"Erreur: {exc}")
+            st.rerun()
     with col_b:
         if st.button("⚖️ Régler les résultats", use_container_width=True):
             with st.spinner("Règlement en cours…"):
                 try:
                     from betbot.scheduler.jobs import job_settle_results
                     job_settle_results()
-                    st.success("Règlement terminé.")
+                    st.toast("Règlement terminé.")
                 except Exception as exc:
                     st.error(f"Erreur: {exc}")
+            st.rerun()
     with col_c:
         if st.button("📊 Recalculer Elo", use_container_width=True):
             with st.spinner("Recalcul Elo en cours…"):
                 try:
                     from betbot.scheduler.jobs import job_recompute_elo
                     job_recompute_elo()
-                    st.success("Elo mis à jour.")
+                    st.toast("Elo mis à jour.")
                 except Exception as exc:
                     st.error(f"Erreur: {exc}")
+            st.rerun()
 
     col_d, col_e = st.columns([1, 1])
     with col_d:
