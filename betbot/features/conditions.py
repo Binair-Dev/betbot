@@ -18,11 +18,19 @@ class ConditionsFeature(Feature):
     def compute(self, match: dict[str, Any]) -> FeatureResult:
         venue = match.get("venue")
         match_date = match.get("match_date")
-        if not venue or not match_date:
+        if not match_date:
             return FeatureResult(delta=(0.0, 0.0, 0.0), confidence=0.0,
-                                 raw={"reason": "no venue/date"}, missing=True)
+                                 raw={"reason": "no date"}, missing=True)
 
-        coords = get_stadium_coords(venue)
+        coords = get_stadium_coords(venue) if venue else None
+
+        if not coords:
+            # Fallback: OpenFootball WC schedule lookup by date + team names
+            from betbot.data.openfoot_wc import get_match_coords
+            home = match.get("home_team_name", "")
+            away = match.get("away_team_name", "")
+            coords = get_match_coords(str(match_date), home, away)
+
         if not coords:
             return FeatureResult(delta=(0.0, 0.0, 0.0), confidence=0.0,
                                  raw={"reason": "unknown venue", "venue": venue}, missing=True)
