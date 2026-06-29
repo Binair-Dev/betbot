@@ -56,7 +56,7 @@ def place_bet(match_id: int, market: str, selection: str, odds: float,
         return None
 
     existing = query(
-        "SELECT bet_id FROM bets WHERE match_id=? AND market=? AND selection=? AND status='pending'",
+        "SELECT id FROM bets WHERE match_id=? AND market=? AND selection=? AND status='pending'",
         (match_id, market, selection),
     )
     if existing:
