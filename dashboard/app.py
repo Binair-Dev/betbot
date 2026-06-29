@@ -106,6 +106,20 @@ def main() -> None:
                 except Exception as exc:
                     st.error(f"Erreur: {exc}")
 
+    col_d, _ = st.columns([1, 2])
+    with col_d:
+        if st.button("🗑️ Vider le cache API", use_container_width=True):
+            try:
+                from betbot.data.cache import _raw_connect
+                conn = _raw_connect()
+                cur = conn.execute("DELETE FROM api_cache")
+                deleted = cur.rowcount
+                conn.commit()
+                conn.close()
+                st.success(f"Cache vidé — {deleted} entrées supprimées.")
+            except Exception as exc:
+                st.error(f"Erreur: {exc}")
+
     st.divider()
     st.subheader("État du système")
 
