@@ -62,23 +62,32 @@ def _get(path: str, params: dict | None = None) -> dict[str, Any] | None:
 
 
 def get_fixtures_by_date(date: datetime) -> list[dict[str, Any]]:
-    """Fixtures for a date, in API-Football-compatible format."""
+    """Fixtures for a date, in API-Football-compatible format.
+
+    Queries per-competition endpoints because the generic /matches endpoint
+    does not return tournament matches (WC, EC, etc.) on the free tier.
+    """
     date_str = date.strftime("%Y-%m-%d")
     cache_key = f"fdo:fixtures:{date_str}"
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
 
-    data = _get("/matches", {"dateFrom": date_str, "dateTo": date_str})
-    if not data:
-        cache_set(cache_key, "fdo_fixtures", [], ttl_seconds=1800)
-        return []
-
     results: list[dict[str, Any]] = []
-    for m in data.get("matches", []):
-        fx = _normalize(m)
-        if fx and fx["league"]["id"] in settings.TARGET_LEAGUES:
-            results.append(fx)
+    seen_ids: set[int] = set()
+    params = {"dateFrom": date_str, "dateTo": date_str}
+
+    for code, league_id in _CODE_TO_LEAGUE.items():
+        if league_id not in settings.TARGET_LEAGUES:
+            continue
+        data = _get(f"/competitions/{code}/matches", params)
+        if not data:
+            continue
+        for m in data.get("matches", []):
+            fx = _normalize(m)
+            if fx and fx["fixture"]["id"] not in seen_ids:
+                seen_ids.add(fx["fixture"]["id"])
+                results.append(fx)
 
     cache_set(cache_key, "fdo_fixtures", results, ttl_seconds=3600)
     log.info("football-data.org: %d target fixtures on %s", len(results), date_str)
