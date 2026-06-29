@@ -106,7 +106,7 @@ def main() -> None:
                 except Exception as exc:
                     st.error(f"Erreur: {exc}")
 
-    col_d, _ = st.columns([1, 2])
+    col_d, col_e = st.columns([1, 1])
     with col_d:
         if st.button("🗑️ Vider le cache API", use_container_width=True):
             try:
@@ -119,6 +119,31 @@ def main() -> None:
                 st.success(f"Cache vidé — {deleted} entrées supprimées.")
             except Exception as exc:
                 st.error(f"Erreur: {exc}")
+    with col_e:
+        if st.button("⚠️ Reset complet", use_container_width=True):
+            if st.session_state.get("reset_confirm"):
+                try:
+                    from betbot.db.repository import execute as db_exec
+                    db_exec("DELETE FROM bets")
+                    db_exec("DELETE FROM predictions")
+                    db_exec("DELETE FROM bankroll_log")
+                    db_exec("DELETE FROM settings WHERE key='bankroll_current'")
+                    db_exec(
+                        "INSERT INTO bankroll_log (balance, event, notes) VALUES (?, 'init', 'Reset manuel')",
+                        (settings.BANKROLL_START,),
+                    )
+                    db_exec(
+                        "INSERT INTO settings (key, value) VALUES ('bankroll_current', ?)",
+                        (str(settings.BANKROLL_START),),
+                    )
+                    st.session_state.reset_confirm = False
+                    st.success(f"Reset effectué — bankroll remise à {settings.BANKROLL_START:.0f}€.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+            else:
+                st.session_state.reset_confirm = True
+                st.warning("Clique à nouveau pour confirmer — toutes les données seront effacées.")
 
     st.divider()
     st.subheader("État du système")
