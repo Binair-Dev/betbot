@@ -119,6 +119,12 @@ def record_prediction(match_id: int, market: str, selection: str,
                       weighted_score: float | None, ml_score: float | None,
                       features_json: dict | None = None) -> int:
     """Store a prediction in the database. Returns prediction_id."""
+    existing = query(
+        "SELECT id FROM predictions WHERE match_id=? AND market=? AND selection=?",
+        (match_id, market, selection),
+    )
+    if existing:
+        return existing[0]["id"]
     return execute(
         """INSERT INTO predictions
            (match_id, market, selection, prob_model, confidence, best_odds,
