@@ -75,6 +75,38 @@ def main() -> None:
         st.info("Aucune donnée — le bot n'a pas encore tourné.")
 
     st.divider()
+    st.subheader("Actions manuelles")
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        if st.button("🔄 Analyse du jour", use_container_width=True):
+            with st.spinner("Analyse en cours…"):
+                try:
+                    from betbot.scheduler.jobs import job_analyze_and_bet
+                    job_analyze_and_bet()
+                    st.success("Analyse terminée — voir les prédictions du jour.")
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+    with col_b:
+        if st.button("⚖️ Régler les résultats", use_container_width=True):
+            with st.spinner("Règlement en cours…"):
+                try:
+                    from betbot.scheduler.jobs import job_settle_results
+                    job_settle_results()
+                    st.success("Règlement terminé.")
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+    with col_c:
+        if st.button("📊 Recalculer Elo", use_container_width=True):
+            with st.spinner("Recalcul Elo en cours…"):
+                try:
+                    from betbot.scheduler.jobs import job_recompute_elo
+                    job_recompute_elo()
+                    st.success("Elo mis à jour.")
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+
+    st.divider()
     st.subheader("État du système")
 
     c1, c2 = st.columns(2)
