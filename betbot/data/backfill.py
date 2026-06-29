@@ -121,11 +121,14 @@ def _upsert_fixture(fx: dict) -> None:
                 (team["id"], team.get("name"), team.get("country"), team.get("logo")),
             )
 
+    raw_date = fixture.get("date") or ""
+    match_date = raw_date.replace("T", " ").replace("Z", "").split("+")[0].strip() or None
+
     execute(sql, (
         match_id,
         league.get("id"),
         league.get("season"),
-        fixture.get("date"),
+        match_date,
         home.get("id"),
         away.get("id"),
         fixture.get("venue", {}).get("name"),
