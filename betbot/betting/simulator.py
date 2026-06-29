@@ -55,6 +55,14 @@ def place_bet(match_id: int, market: str, selection: str, odds: float,
         log.warning("Insufficient bankroll (%.2f€) for bet of %.2f€", bankroll, stake)
         return None
 
+    existing = query(
+        "SELECT bet_id FROM bets WHERE match_id=? AND market=? AND selection=? AND status='pending'",
+        (match_id, market, selection),
+    )
+    if existing:
+        log.info("Bet already placed on match=%s %s %s — skipping", match_id, market, selection)
+        return None
+
     now = datetime.now(datetime.UTC).isoformat() if hasattr(datetime, "UTC") else datetime.utcnow().isoformat()
     bet_id = execute(
         """INSERT INTO bets (match_id, prediction_id, market, selection, odds,
