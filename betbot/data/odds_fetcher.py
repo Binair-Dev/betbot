@@ -55,22 +55,25 @@ def fetch_odds_for_today(matches: list[dict]) -> dict[int, list[dict]]:
     log.info("Fetching odds for %d leagues", len(sport_keys_used))
 
     for sport_key in sport_keys_used:
-        try:
-            events = get_odds_for_sport(
-                sport_key,
-                markets="h2h,totals,btts,double_chance,correct_score",
-                regions="eu,uk",
-            )
-            for ev in events:
-                # The Odds API uses team names to identify matches; we cross-reference
-                # with API-Football fixtures via team name match (approximate).
-                odds_rows = _normalize_event_odds(ev)
-                match_id = _find_match_id(ev, matches)
-                if match_id:
-                    result[match_id] = odds_rows
-                    _persist_event_odds(match_id, ev, odds_rows)
-        except Exception as exc:
-            log.warning("Failed to fetch odds for %s: %s", sport_key, exc)
+        events = None
+        for markets in ("h2h,totals,btts,double_chance,correct_score", "h2h,totals,btts", "h2h"):
+            try:
+                events = get_odds_for_sport(sport_key, markets=markets, regions="eu,uk")
+                break
+            except Exception as exc:
+                if "422" in str(exc) or "Unprocessable" in str(exc):
+                    log.debug("Markets %r unsupported for %s, retrying with fewer", markets, sport_key)
+                    continue
+                log.warning("Failed to fetch odds for %s: %s", sport_key, exc)
+                break
+        if not events:
+            continue
+        for ev in events:
+            odds_rows = _normalize_event_odds(ev)
+            match_id = _find_match_id(ev, matches)
+            if match_id:
+                result[match_id] = odds_rows
+                _persist_event_odds(match_id, ev, odds_rows)
 
     log.info("Fetched odds for %d matches", len(result))
     return result
