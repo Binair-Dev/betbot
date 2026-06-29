@@ -35,7 +35,7 @@ with c9:
     if kpis['total']:
         avg_odds = 0.0
         # We'd need to query avg odds; keep simple
-        st.caption("Profit moyen / pari:", f"{kpis['profit'] / max(1, kpis['won'] + kpis['lost']):.2f}€")
+        st.caption(f"Profit moyen / pari: {kpis['profit'] / max(1, kpis['won'] + kpis['lost']):.2f}€")
 with c10:
     if kpis['roi'] > 0:
         st.success(f"✅ Stratégie profitable (ROI +{kpis['roi']:.2%})")
