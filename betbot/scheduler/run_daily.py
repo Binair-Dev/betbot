@@ -21,7 +21,7 @@ from betbot.logging_setup import get_logger
 from betbot.models.confidence import ConfidenceAggregator
 from betbot.models.markets import compute_all_markets
 from betbot.models.ml_model import MLModel
-from betbot.models.poisson import GoalExpectation, estimate_lambdas, team_ratings_from_xg
+from betbot.models.poisson import estimate_lambdas, team_ratings_from_xg
 
 log = get_logger(__name__)
 
@@ -146,32 +146,30 @@ def _process_match(fx: dict, orchestrator: FeatureOrchestrator,
     # Compute features
     feature_bundle = orchestrator.run(match)
 
-    # Estimate Poisson lambdas (heuristic when xG data unavailable)
-    home_xg = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("home_form", {}).get("xg_per_match", 1.3)
-    away_xg = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("away_form", {}).get("xg_per_match", 1.1)
-    home_xga = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("home_form", {}).get("xga_per_match", 1.1)
-    away_xga = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("away_form", {}).get("xga_per_match", 1.3)
-    home_att, home_def, away_att, away_def = team_ratings_from_xg(
-        home_xg, home_xga
-    )
-    home_att2, home_def2, away_att2, away_def2 = team_ratings_from_xg(
-        away_xg, away_xga
-    )
-    # Average attack/defense pairs
-    avg_home_att = (home_att + away_def2) / 2
-    avg_home_def = (home_def + away_att2) / 2
-    avg_away_att = (away_att + home_def2) / 2
-    avg_away_def = (away_def + home_att2) / 2
-    exp = estimate_lambdas(avg_home_att, avg_home_def, avg_away_att, avg_away_def)
+    # Estimate Poisson lambdas — one rating per team from its own xG/xGA.
+    home_form = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("home_form", {})
+    away_form = feature_bundle.breakdown.get("xg_form", {}).get("raw", {}).get("away_form", {})
+    home_xg = home_form.get("xg_per_match", 1.30)
+    home_xga = home_form.get("xga_per_match", 1.30)
+    away_xg = away_form.get("xg_per_match", 1.15)
+    away_xga = away_form.get("xga_per_match", 1.15)
+
+    home_att, home_def = team_ratings_from_xg(home_xg, home_xga)
+    away_att, away_def = team_ratings_from_xg(away_xg, away_xga)
+    exp = estimate_lambdas(home_att, home_def, away_att, away_def)
 
     # Compute all markets
     markets = compute_all_markets(match_id, exp)
 
-    # Compute confidence per market
+    # Compute confidence per market.
+    # For 1X2 we use the Poisson-derived margin between the model's top
+    # outcome and the second-best — this is per-market and will be
+    # specialised per-selection inside the decision engine.
+    poisson_probs = sorted([markets.p_1, markets.p_x, markets.p_2], reverse=True)
+    margin_1x2 = max(0.0, poisson_probs[0] - poisson_probs[1])
     feature_conf = feature_bundle.confidence
-    poisson_max = max(markets.p_1, markets.p_x, markets.p_2)
     conf_map = {
-        "1X2": max(feature_conf, poisson_max),
+        "1X2": max(feature_conf, margin_1x2),
         "btts": max(markets.btts),
         "double_chance": max(markets.double_chance.values()),
         "correct_score": markets.exact_score[0][1] if markets.exact_score else 0.0,

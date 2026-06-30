@@ -46,17 +46,21 @@ def estimate_lambdas(home_attack: float, home_defense: float,
 
 
 def team_ratings_from_xg(xg_for_per_match: float, xga_per_match: float,
-                          league_avg_home: float = 1.45,
-                          league_avg_away: float = 1.10) -> tuple[float, float, float, float]:
-    """Convert team's xG/xGA per-match to attack/defense ratings.
+                          league_avg_goals: float = 1.275) -> tuple[float, float]:
+    """Convert one team's xG/xGA per-match to (attack, defense) rating multipliers.
 
-    Returns (home_attack, home_defense, away_attack, away_defense) multipliers.
-    The split is approximate: a team's overall attacking output is used as
-    attack rating; defensive output vs league average gives defense rating.
+    - attack > 1.0: team scores more than the league average.
+    - defense < 1.0: team concedes less than the league average (good).
+
+    `league_avg_goals` defaults to ~1.275, the typical average of home+away
+    goals per team per match across major leagues. Call this function once
+    per team — it no longer fabricates two teams' worth of ratings from a
+    single team's stats.
     """
-    attack = max(0.4, min(2.5, xg_for_per_match / max(0.5, (league_avg_home + league_avg_away) / 2)))
-    defense = max(0.4, min(2.5, xga_per_match / max(0.5, (league_avg_home + league_avg_away) / 2)))
-    return attack, defense, attack, defense
+    denom = max(0.5, league_avg_goals)
+    attack = max(0.4, min(2.5, xg_for_per_match / denom))
+    defense = max(0.4, min(2.5, xga_per_match / denom))
+    return attack, defense
 
 
 # ----------------------------------------------------------------------------

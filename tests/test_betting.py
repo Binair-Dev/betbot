@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from betbot.betting.decision import DecisionEngine, MatchDecision, MarketCandidate
+from betbot.config import settings
 from betbot.betting.value_calc import (
     ValueBet,
     compute_market_value,
@@ -72,22 +73,30 @@ def _make_market_probs() -> MarketProbabilities:
     )
 
 
+def _decisive_market_probs() -> MarketProbabilities:
+    """Probs with strong per-selection margins so candidates pass thresholds."""
+    return MarketProbabilities(
+        match_id=1,
+        p_1=0.85, p_x=0.10, p_2=0.05,   # home margin = 0.75
+        over_under={"2.5": (0.92, 0.08), "1.5": (0.95, 0.05)},
+        btts=(0.90, 0.10),
+        double_chance={"1X": 0.95, "X2": 0.15, "12": 0.90},
+        exact_score=[("1-0", 0.20), ("2-0", 0.18), ("3-0", 0.10)],
+        dnb=(0.94, 0.06),
+        lambda_home=2.5, lambda_away=0.7,
+    )
+
+
 def test_decision_picks_highest_confidence_meeting_thresholds():
     engine = DecisionEngine()
-    mp = _make_market_probs()
-    # Confidences chosen so 1X2 "home" is highest at 0.85 and has good value
-    conf_map = {
-        "1X2": 0.85, "btts": 0.55, "double_chance": 0.75,
-        "correct_score": 0.55, "draw_no_bet": 0.65,
-        "over_under_2.5": 0.60, "over_under_1.5": 0.70,
-    }
+    mp = _decisive_market_probs()
+    conf_map = {"1X2": 0.85}
     odds_history = [
-        {"market": "h2h", "selection": "home", "odds": 1.95, "bookmaker": "A"},   # value = 0.55*1.95-1 = 0.0725
-        {"market": "h2h", "selection": "draw", "odds": 3.6, "bookmaker": "A"},    # value = 0.25*3.6-1 = -0.10
-        {"market": "h2h", "selection": "away", "odds": 4.5, "bookmaker": "A"},    # value = 0.20*4.5-1 = -0.10
+        {"market": "h2h", "selection": "home", "odds": 1.95, "bookmaker": "A"},   # value = 0.85*1.95-1 = 0.6575
+        {"market": "h2h", "selection": "draw", "odds": 3.6, "bookmaker": "A"},
+        {"market": "h2h", "selection": "away", "odds": 4.5, "bookmaker": "A"},
     ]
-    match = {"match_id": 1}
-    decision = engine.decide(match, mp, conf_map, odds_history)
+    decision = engine.decide({"match_id": 1}, mp, conf_map, odds_history)
     assert decision.selected is not None
     assert decision.selected.market == "1X2"
     assert decision.selected.selection == "home"
@@ -95,8 +104,8 @@ def test_decision_picks_highest_confidence_meeting_thresholds():
 
 def test_decision_rejects_low_confidence():
     engine = DecisionEngine()
-    mp = _make_market_probs()
-    conf_map = {"1X2": 0.50}  # below threshold
+    mp = _make_market_probs()  # home margin = 0.55-0.25 = 0.30, below threshold
+    conf_map = {"1X2": 0.30}
     odds_history = [
         {"market": "h2h", "selection": "home", "odds": 1.95, "bookmaker": "A"},
         {"market": "h2h", "selection": "draw", "odds": 3.6, "bookmaker": "A"},
@@ -109,11 +118,10 @@ def test_decision_rejects_low_confidence():
 
 def test_decision_rejects_negative_value():
     engine = DecisionEngine()
-    mp = _make_market_probs()
-    # Force confidence high but odds too short → negative value
-    conf_map = {"1X2": 0.90, "over_under_2.5": 0.90}
+    mp = _decisive_market_probs()
+    conf_map = {"1X2": 0.90}
     odds_history = [
-        {"market": "h2h", "selection": "home", "odds": 1.20, "bookmaker": "A"},   # value = 0.55*1.20-1 = -0.34
+        {"market": "h2h", "selection": "home", "odds": 1.05, "bookmaker": "A"},  # value = 0.85*1.05-1 = -0.1075
         {"market": "h2h", "selection": "draw", "odds": 5.0, "bookmaker": "A"},
         {"market": "h2h", "selection": "away", "odds": 10.0, "bookmaker": "A"},
     ]
@@ -124,13 +132,9 @@ def test_decision_rejects_negative_value():
 def test_decision_single_bet_per_match():
     """Even if multiple markets meet thresholds, decision.selected is the highest."""
     engine = DecisionEngine()
-    mp = _make_market_probs()
+    mp = _decisive_market_probs()
     conf_map = {
-        "1X2": 0.95,
-        "over_under_1.5": 0.85,
-        "over_under_2.5": 0.75,
-        "btts": 0.70,
-        "double_chance": 0.80,
+        "1X2": 0.95, "over_under_2.5": 0.75, "btts": 0.70, "double_chance": 0.80,
     }
     odds_history = [
         {"market": "h2h", "selection": "home", "odds": 1.95, "bookmaker": "A"},
@@ -145,7 +149,12 @@ def test_decision_single_bet_per_match():
         {"market": "double_chance", "selection": "12", "odds": 1.35, "bookmaker": "A"},
     ]
     decision = engine.decide({"match_id": 1}, mp, conf_map, odds_history)
-    # Selected should be only ONE candidate (1X2 home), even though many meet thresholds
     assert decision.selected is not None
-    assert decision.selected.market == "1X2"
-    assert len(decision.all_candidates) >= 3  # we have many candidates evaluated
+    # Per-selection confidence: the actual winner is whichever has the
+    # best margin. Just check the selected one is the highest-confident
+    # candidate that also passes thresholds.
+    assert decision.selected.confidence >= settings.CONFIDENCE_THRESHOLD
+    assert decision.selected.value >= settings.VALUE_THRESHOLD
+    eligible = [c for c in decision.all_candidates if c.meets_threshold()]
+    assert decision.selected is eligible[0]
+    assert len(decision.all_candidates) >= 3

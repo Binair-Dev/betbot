@@ -49,6 +49,12 @@ class Settings:
     # Thresholds
     CONFIDENCE_THRESHOLD: float = _get_float("CONFIDENCE_THRESHOLD", 0.60)
     VALUE_THRESHOLD: float = _get_float("VALUE_THRESHOLD", 0.03)
+    # Minimum margin (prob - second_best) required for a draw selection.
+    # Without this, draws on close matches sneak through with barely-positive
+    # value because bookmakers overprice draws relative to their true frequency.
+    MIN_DRAW_MARGIN: float = _get_float("MIN_DRAW_MARGIN", 0.08)
+    # Cap on absurd implied probabilities from a mis-calibrated model.
+    MAX_SELECTION_VALUE: float = _get_float("MAX_SELECTION_VALUE", 1.0)
 
     # API keys
     # API-Football (api-sports.io) — free tier: seasons 2022-2024 only
