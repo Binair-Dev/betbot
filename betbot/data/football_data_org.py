@@ -131,6 +131,9 @@ def _normalize(m: dict) -> dict[str, Any] | None:
     away = m.get("awayTeam", {})
     ft = m.get("score", {}).get("fullTime", {})
     ht = m.get("score", {}).get("halfTime", {})
+    reg = m.get("score", {}).get("regularTime", {}) or {}
+    et = m.get("score", {}).get("extraTime", {}) or {}
+    pen = m.get("score", {}).get("penalties", {}) or {}
     referees = m.get("referees", [])
     referee = next((r.get("name") for r in referees if r.get("type") == "REFEREE"), None)
     utc_date = m.get("utcDate", "")
@@ -153,13 +156,28 @@ def _normalize(m: dict) -> dict[str, Any] | None:
             "away": {"id": away.get("id"), "name": away.get("name", "")},
         },
         "goals": {"home": ft.get("home"), "away": ft.get("away")},
-        "score": {"halftime": {"home": ht.get("home"), "away": ht.get("away")}},
+        "score": {
+            "halftime": {"home": ht.get("home"), "away": ht.get("away")},
+            "regular": {"home": reg.get("home"), "away": reg.get("away")},
+            "extratime": {"home": et.get("home"), "away": et.get("away")},
+            "penalty": {"home": pen.get("home"), "away": pen.get("away")},
+        },
+        "_score_duration": m.get("score", {}).get("duration"),
+        "_score_winner": m.get("score", {}).get("winner"),
         "_source": "football_data_org",
     }
 
 
 def refresh_match_result(match_id: int) -> dict[str, Any] | None:
-    """Fetch current status + score for a match. Short-TTL for settlement use."""
+    """Fetch current status + score for a match. Short-TTL for settlement use.
+
+    Returns a dict that includes the FULL score breakdown:
+    - regular (90-min score — used for 1X2 / O-U / BTTS markets)
+    - extratime (goals in ET)
+    - penalty (shootout score)
+    - duration (REGULAR / EXTRA_TIME / PENALTY_SHOOTOUT)
+    - winner (HOME_TEAM / AWAY_TEAM / DRAW — final, includes penalties)
+    """
     cache_key = f"fdo:match:{match_id}:result"
     cached = cache_get(cache_key)
     if cached is not None:
@@ -174,16 +192,43 @@ def refresh_match_result(match_id: int) -> dict[str, Any] | None:
     if not m:
         return None
 
-    ft = m.get("score", {}).get("fullTime", {})
-    ht = m.get("score", {}).get("halfTime", {})
+    sc = m.get("score", {}) or {}
+    ft = sc.get("fullTime", {}) or {}
+    ht = sc.get("halfTime", {}) or {}
+    reg = sc.get("regularTime", {}) or {}
+    et = sc.get("extraTime", {}) or {}
+    pen = sc.get("penalties", {}) or {}
     status_raw = m.get("status", "")
+    duration = sc.get("duration")  # REGULAR / EXTRA_TIME / PENALTY_SHOOTOUT
+    # For FINISHED league games duration is "REGULAR"; for WC knockouts it can be "PENALTY_SHOOTOUT"
+    # regularTime can be null when status was TIMED/SCHEDULED — fall back to fullTime
+    reg_home = reg.get("home") if reg.get("home") is not None else ft.get("home")
+    reg_away = reg.get("away") if reg.get("away") is not None else ft.get("away")
+    et_home = et.get("home") or 0
+    et_away = et.get("away") or 0
+    pen_home = pen.get("home") or 0
+    pen_away = pen.get("away") or 0
+    if duration is None:
+        duration = "PENALTY_SHOOTOUT" if (pen_home or pen_away) else (
+            "EXTRA_TIME" if (et_home or et_away) else "REGULAR"
+        )
     result = {
         "match_id": m["id"],
         "status": _STATUS_MAP.get(status_raw, status_raw),
+        # Legacy fields (full-time incl. ET goals, NO penalties)
         "home_score": ft.get("home"),
         "away_score": ft.get("away"),
         "home_ht_score": ht.get("home"),
         "away_ht_score": ht.get("away"),
+        # Breakdown — used by settlement for 90-min markets
+        "home_score_regular": reg_home,
+        "away_score_regular": reg_away,
+        "home_score_et": et_home,
+        "away_score_et": et_away,
+        "home_score_pen": pen_home,
+        "away_score_pen": pen_away,
+        "match_duration": duration,
+        "match_winner": sc.get("winner"),
     }
     ttl = 3600 if status_raw == "FINISHED" else 120
     cache_set(cache_key, "fdo_match_result", result, ttl_seconds=ttl)

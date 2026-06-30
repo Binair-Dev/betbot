@@ -5,6 +5,12 @@ Real implementation will:
 2. Fetch each match's final score from API-Football
 3. Determine the actual outcome of the bet
 4. Mark the bet won/lost and update bankroll
+
+Market rules (defaults — all settled on 90-min regulation time, matching
+standard bookmaker practice for 1X2, O/U, BTTS, DC, DNB, correct score):
+- 1X2, double_chance, draw_no_bet, correct_score → regulation score only
+- over_under, btts → regulation score only
+- (If a future "advance / winner" market is added, use fullTime + match_winner.)
 """
 from __future__ import annotations
 
@@ -12,6 +18,7 @@ import json
 from typing import Any
 
 from betbot.betting.simulator import settle_bet, void_bet
+from betbot.config import settings
 from betbot.data.api_football import get_fixture_by_id
 from betbot.db.repository import execute, query, query_one
 from betbot.logging_setup import get_logger
@@ -23,7 +30,11 @@ def settle_pending_bets() -> int:
     """Settle all pending bets whose matches are finished."""
     rows = query("""
         SELECT b.id AS bet_id, b.match_id, b.market, b.selection, b.odds, b.stake,
-               m.home_score, m.away_score, m.status
+               m.home_score, m.away_score, m.status,
+               m.home_score_regular, m.away_score_regular,
+               m.home_score_et, m.away_score_et,
+               m.home_score_pen, m.away_score_pen,
+               m.match_duration, m.match_winner
         FROM bets b
         JOIN matches m ON m.match_id = b.match_id
         WHERE b.status = 'pending'
@@ -37,13 +48,24 @@ def settle_pending_bets() -> int:
 
     count = 0
     for r in rows:
-        won = _outcome_matches(r["market"], r["selection"],
-                               r["home_score"], r["away_score"])
+        home_reg = r["home_score_regular"] if r["home_score_regular"] is not None else r["home_score"]
+        away_reg = r["away_score_regular"] if r["away_score_regular"] is not None else r["away_score"]
+        won = _outcome_matches(
+            r["market"], r["selection"], home_reg, away_reg,
+        )
         if won is None:
             void_bet(r["bet_id"], r["stake"])
         else:
             settle_bet(r["bet_id"], won, r["odds"], r["stake"])
         count += 1
+        log.info(
+            "Settled bet %s: market=%s selection=%s reg=%s-%s et=%s-%s pen=%s-%s → %s",
+            r["bet_id"], r["market"], r["selection"],
+            r["home_score_regular"], r["away_score_regular"],
+            r["home_score_et"], r["away_score_et"],
+            r["home_score_pen"], r["away_score_pen"],
+            "won" if won else ("void" if won is None else "lost"),
+        )
     log.info("Settled %d bets", count)
     return count
 
@@ -52,7 +74,8 @@ def settle_pending_bets_dry_run() -> dict[str, int]:
     """Settle pending bets based on stored match scores (used by backtest)."""
     rows = query("""
         SELECT b.id AS bet_id, b.market, b.selection, b.odds, b.stake,
-               m.home_score, m.away_score
+               m.home_score, m.away_score,
+               m.home_score_regular, m.away_score_regular
         FROM bets b
         JOIN matches m ON m.match_id = b.match_id
         WHERE b.status = 'pending'
@@ -62,8 +85,9 @@ def settle_pending_bets_dry_run() -> dict[str, int]:
     """)
     summary = {"won": 0, "lost": 0, "void": 0}
     for r in rows:
-        won = _outcome_matches(r["market"], r["selection"],
-                               r["home_score"], r["away_score"])
+        home_reg = r["home_score_regular"] if r["home_score_regular"] is not None else r["home_score"]
+        away_reg = r["away_score_regular"] if r["away_score_regular"] is not None else r["away_score"]
+        won = _outcome_matches(r["market"], r["selection"], home_reg, away_reg)
         if won is None:
             summary["void"] += 1
         elif won:
@@ -74,7 +98,12 @@ def settle_pending_bets_dry_run() -> dict[str, int]:
 
 
 def _outcome_matches(market: str, selection: str, home: int, away: int) -> bool | None:
-    """Determine if a bet wins given the actual score."""
+    """Determine if a bet wins given the (regulation-time) score.
+
+    `home` and `away` MUST be the 90-min regulation score. Knockout matches
+    whose result is decided by extra time or penalties must have been
+    pre-resolved by the caller (see settle_pending_bets()).
+    """
     if market == "1X2":
         if selection == "home":
             return home > away

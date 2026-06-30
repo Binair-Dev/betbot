@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from betbot.config import settings
+from betbot.logging_setup import get_logger
+
+log = get_logger(__name__)
 
 
 def get_db_path() -> Path:
@@ -46,7 +49,40 @@ def init_db() -> None:
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with get_conn() as conn:
         conn.executescript(schema_sql)
+        _migrate(conn)
     _seed_defaults()
+
+
+_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    ("home_score_regular", "ALTER TABLE matches ADD COLUMN home_score_regular INTEGER"),
+    ("away_score_regular", "ALTER TABLE matches ADD COLUMN away_score_regular INTEGER"),
+    ("home_score_et", "ALTER TABLE matches ADD COLUMN home_score_et INTEGER"),
+    ("away_score_et", "ALTER TABLE matches ADD COLUMN away_score_et INTEGER"),
+    ("home_score_pen", "ALTER TABLE matches ADD COLUMN home_score_pen INTEGER"),
+    ("away_score_pen", "ALTER TABLE matches ADD COLUMN away_score_pen INTEGER"),
+    ("match_duration", "ALTER TABLE matches ADD COLUMN match_duration TEXT"),
+    ("match_winner", "ALTER TABLE matches ADD COLUMN match_winner TEXT"),
+)
+
+
+def _migrate(conn) -> None:
+    """Add columns that may be missing from an older schema.
+
+    SQLite has no ADD COLUMN IF NOT EXISTS, so we inspect pragma_table_info
+    and apply only the missing ALTERs. Idempotent and safe on every init.
+    """
+    existing = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(matches)").fetchall()
+    }
+    for col, ddl in _MIGRATIONS:
+        if col in existing:
+            continue
+        try:
+            conn.execute(ddl)
+            log.info("migration: added matches.%s", col)
+        except Exception as exc:
+            log.warning("migration failed for %s: %s", col, exc)
 
 
 def _seed_defaults() -> None:

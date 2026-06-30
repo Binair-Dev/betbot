@@ -32,6 +32,18 @@ def run_daily_analysis() -> None:
     now = datetime.now(tz)
     log.info("Starting daily analysis pipeline at %s", now.isoformat())
 
+    # Step 0: settle any bets whose matches finished since last run
+    # (covers missed 23:00 jobs — e.g. container was down)
+    try:
+        from betbot.betting.results import settle_pending_bets
+        from betbot.scheduler.jobs import _refresh_pending_match_scores
+        _refresh_pending_match_scores()
+        n_settled = settle_pending_bets()
+        if n_settled:
+            log.info("Settled %d late bet(s) at start of daily run", n_settled)
+    except Exception as exc:
+        log.warning("Pre-run settlement failed (non-blocking): %s", exc)
+
     today = now.date()
     tomorrow = today + timedelta(days=1)
 

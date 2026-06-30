@@ -44,11 +44,21 @@ CREATE TABLE IF NOT EXISTS matches (
     away_team_id INTEGER NOT NULL,
     venue TEXT,
     referee TEXT,
-    status TEXT DEFAULT 'NS',   -- NS / 1H / HT / 2H / FT / POSTPONED
+    status TEXT DEFAULT 'NS',   -- NS / 1H / HT / 2H / FT / AET / PEN / POSTPONED
+    -- Full-time (after extra time, incl. goals scored in ET — NOT penalties)
     home_score INTEGER,
     away_score INTEGER,
     home_ht_score INTEGER,
     away_ht_score INTEGER,
+    -- Score breakdown for knockout matches (NULL in regulation-only matches)
+    home_score_regular INTEGER,   -- 90-min score (used for 1X2 / O-U / BTTS)
+    away_score_regular INTEGER,
+    home_score_et INTEGER,        -- goals scored in extra time
+    away_score_et INTEGER,
+    home_score_pen INTEGER,       -- penalty shootout score
+    away_score_pen INTEGER,
+    match_duration TEXT,          -- REGULAR / EXTRA_TIME / PENALTY_SHOOTOUT
+    match_winner TEXT,            -- HOME_TEAM / AWAY_TEAM / DRAW (FT winner incl. penalties)
     weather_json TEXT,
     pitch_type TEXT,
     context_flags_json TEXT,    -- derby, manager_change, congested, etc.
