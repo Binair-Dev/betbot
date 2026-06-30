@@ -10,7 +10,7 @@ services:
     working_dir: /app
     command: ["bot"]
     volumes:
-      - bot-data:/app/data
+      - ./data:/app/data
     environment:
       - PYTHONPATH=/app
       - HOME=/app
@@ -38,7 +38,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - bot-data:/app/data
+      - ./data:/app/data
     environment:
       - PYTHONPATH=/app
       - HOME=/app
@@ -60,6 +60,10 @@ networks:
   betbot-net:
     driver: bridge
 
+# Bind mount ./data:/app/data is shared between bot and dashboard.
+# The named volume 'bot-data' is preserved here as an orphan in case you
+# need to roll back — remove it with `docker volume rm betbot-data` once
+# you've confirmed everything works.
 volumes:
   bot-data:
     name: betbot-data
