@@ -1,6 +1,7 @@
 """Scheduler jobs for Betbot."""
 from __future__ import annotations
 
+import time
 from datetime import datetime
 
 import pytz
@@ -10,6 +11,14 @@ from betbot.logging_setup import get_logger
 
 log = get_logger(__name__)
 _TZ = pytz.timezone(settings.TIMEZONE)
+
+# Refresh retry policy: when both sources (football-data.org and
+# API-Football) fail to return a match result, retry the whole multi-source
+# attempt with growing backoff. Protects against transient SSL /
+# connection-reset / 429 storms that would otherwise leave a bet pending
+# for 24h until the next cron tick.
+_REFRESH_MAX_ATTEMPTS = 3
+_REFRESH_BACKOFF_SECONDS = (10, 30, 90)
 
 
 def job_analyze_and_bet() -> None:
@@ -66,9 +75,25 @@ def _refresh_pending_match_scores() -> None:
     log.info("Refreshing scores for %d pending matches", len(pending))
     for row in pending:
         mid = row["match_id"]
-        result = _fetch_match_result(mid)
+        result = None
+        last_error = None
+        for attempt in range(1, _REFRESH_MAX_ATTEMPTS + 1):
+            try:
+                result = _fetch_match_result(mid)
+            except Exception as exc:
+                last_error = str(exc)
+                log.warning("Refresh attempt %d/%d for match %s raised: %s",
+                            attempt, _REFRESH_MAX_ATTEMPTS, mid, exc)
+            if result is not None:
+                break
+            if attempt < _REFRESH_MAX_ATTEMPTS:
+                wait = _REFRESH_BACKOFF_SECONDS[attempt - 1]
+                log.info("Match %s refresh failed (attempt %d/%d), retrying in %ds",
+                         mid, attempt, _REFRESH_MAX_ATTEMPTS, wait)
+                time.sleep(wait)
         if not result:
-            log.warning("No result data for match %s (sources exhausted) — will retry", mid)
+            log.warning("No result data for match %s after %d attempts (%s) — will retry next cycle",
+                        mid, _REFRESH_MAX_ATTEMPTS, last_error or "sources exhausted")
             continue
         execute(
             """UPDATE matches SET
