@@ -1,4 +1,12 @@
-"""Betbot Streamlit dashboard — entry point."""
+"""Betbot dashboard — entry point.
+
+The bot is now a pure scraper. This dashboard shows:
+- Vue d'ensemble: scraping status, league coverage, daily match volume,
+  manual trigger buttons.
+- Données brutes: every match + every bookmaker odds + final scores.
+
+There are no predictions, no betting, no model output.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -11,7 +19,7 @@ from betbot.db.repository import query
 from dashboard.auth import check_auth
 
 st.set_page_config(
-    page_title="Betbot Dashboard",
+    page_title="Betbot Scraper",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -23,152 +31,120 @@ def main() -> None:
         return
 
     with st.sidebar:
-        st.title("⚽ Betbot")
-        st.caption(f"Bankroll: {settings.BANKROLL_START:.0f}€ · Mise: {settings.BET_SIZE:.0f}€")
+        st.title("⚽ Betbot Scraper")
+        st.caption("Collecte de données brutes · pas de paris")
         st.divider()
-        st.caption("**Seuils**")
-        st.caption(f"Confiance ≥ {settings.CONFIDENCE_THRESHOLD:.0%}")
-        st.caption(f"Value ≥ {settings.VALUE_THRESHOLD:.0%}")
+        st.caption("**Sources**")
+        st.caption("• football-data.org (fixtures, résultats)")
+        st.caption("• The Odds API (cotes multi-bookmakers)")
+        st.divider()
+        st.caption("**Cron**")
+        st.caption("00:00 — complet · 06/12/18/23h — cotes+résultats")
         st.divider()
         if st.button("🚪 Déconnexion"):
             st.session_state.authenticated = False
             st.rerun()
 
-    st.title("⚽ Betbot Dashboard")
-    st.caption(f"Bot de value betting automatisé · TZ: {settings.TIMEZONE}")
+    st.title("⚽ Betbot Scraper")
+    st.caption("Données brutes du football, sans modèle ni paris.")
 
     st.divider()
 
-    bankroll_row = query("SELECT balance FROM bankroll_log ORDER BY at DESC LIMIT 1")
-    current_bankroll = bankroll_row[0]["balance"] if bankroll_row else settings.BANKROLL_START
-
-    bets_total_row = query("SELECT COUNT(*) AS c FROM bets")
-    bets_total = bets_total_row[0]["c"] if bets_total_row else 0
-
-    bets_won_row = query("SELECT COUNT(*) AS c FROM bets WHERE status='won'")
-    bets_won = bets_won_row[0]["c"] if bets_won_row else 0
-
-    profit_row = query("SELECT COALESCE(SUM(profit), 0) AS p FROM bets WHERE status IN ('won','lost')")
-    profit = profit_row[0]["p"] if profit_row else 0.0
+    # Headline numbers
+    headline = query("""
+        SELECT
+            (SELECT COUNT(*) FROM matches) AS n_matches,
+            (SELECT COUNT(*) FROM matches WHERE status='FT') AS n_finished,
+            (SELECT COUNT(*) FROM matches WHERE status IN ('NS','1H','2H','HT')) AS n_upcoming,
+            (SELECT COUNT(*) FROM odds_history) AS n_odds,
+            (SELECT COUNT(*) FROM teams) AS n_teams,
+            (SELECT COUNT(*) FROM leagues) AS n_leagues
+    """)[0]
 
     col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Bankroll", f"{current_bankroll:.2f}€",
-                  delta=f"{current_bankroll - settings.BANKROLL_START:.2f}€")
-    with col2:
-        st.metric("Paris placés", bets_total)
-    with col3:
-        hit_rate = (bets_won / bets_total) if bets_total else 0.0
-        st.metric("Hit rate", f"{hit_rate:.1%}")
-    with col4:
-        st.metric("Profit", f"{profit:.2f}€")
+    col1.metric("Matchs indexés", headline["n_matches"] or 0)
+    col2.metric("Terminés", headline["n_finished"] or 0)
+    col3.metric("À venir / live", headline["n_upcoming"] or 0)
+    col4.metric("Cotes stockées", headline["n_odds"] or 0)
+
+    col5, col6, _, _ = st.columns(4)
+    col5.metric("Ligues", headline["n_leagues"] or 0)
+    col6.metric("Équipes", headline["n_teams"] or 0)
 
     st.divider()
-    st.subheader("Évolution bankroll")
+    st.subheader("🚀 Lancer un scrape")
 
-    history = query("SELECT at, balance FROM bankroll_log ORDER BY at")
-    if history:
-        df = pd.DataFrame([dict(r) for r in history])
-        df["at"] = pd.to_datetime(df["at"])
-        st.line_chart(df, x="at", y="balance")
+    a, b, c, d = st.columns(4)
+    with a:
+        if st.button("🔄 Scrape complet", use_container_width=True):
+            with st.spinner("Scrape en cours…"):
+                try:
+                    from betbot.scheduler.scrape import scrape_all
+                    result = scrape_all(days_ahead=2)
+                    st.success(
+                        f"Fixtures: {sum(result['fixtures'].values())} · "
+                        f"Résultats: {result['results']} · "
+                        f"Cotes: {result['odds_matches']} match(s)"
+                    )
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+            st.rerun()
+    with b:
+        if st.button("📋 Fixtures", use_container_width=True):
+            with st.spinner("Fixtures…"):
+                try:
+                    from betbot.scheduler.scrape import scrape_fixtures
+                    result = scrape_fixtures(days_ahead=2)
+                    st.success(f"{sum(result.values())} match(s) collecté(s)")
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+            st.rerun()
+    with c:
+        if st.button("🏁 Résultats", use_container_width=True):
+            with st.spinner("Résultats…"):
+                try:
+                    from betbot.scheduler.scrape import refresh_results
+                    st.json(refresh_results())
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+    with d:
+        if st.button("💹 Cotes", use_container_width=True):
+            with st.spinner("Cotes…"):
+                try:
+                    from betbot.scheduler.scrape import scrape_odds
+                    n = scrape_odds(days_ahead=2)
+                    st.success(f"{n} match(s) avec cotes")
+                except Exception as exc:
+                    st.error(f"Erreur: {exc}")
+
+    st.divider()
+    st.subheader("📅 Matchs à venir (7 prochains jours)")
+
+    upcoming = query("""
+        SELECT m.match_date, l.name AS league,
+               th.name AS home_team, ta.name AS away_team, m.status
+        FROM matches m
+        LEFT JOIN teams th ON th.team_id = m.home_team_id
+        LEFT JOIN teams ta ON ta.team_id = m.away_team_id
+        LEFT JOIN leagues l ON l.league_id = m.league_id
+        WHERE date(m.match_date) BETWEEN date('now') AND date('now', '+7 days')
+        ORDER BY m.match_date
+        LIMIT 50
+    """)
+    if upcoming:
+        df = pd.DataFrame([dict(r) for r in upcoming])
+        df["match_date"] = pd.to_datetime(df["match_date"]).dt.strftime("%d/%m %H:%M")
+        df.columns = ["Date", "Ligue", "Domicile", "Extérieur", "Statut"]
+        st.dataframe(df, use_container_width=True, hide_index=True, height=320)
     else:
-        st.info("Aucune donnée — le bot n'a pas encore tourné.")
+        st.info("Aucun match à venir collecté. Lance un scrape.")
 
     st.divider()
-    st.subheader("Actions manuelles")
-
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        if st.button("🔄 Analyse du jour", use_container_width=True):
-            with st.spinner("Analyse en cours…"):
-                try:
-                    from betbot.scheduler.jobs import job_analyze_and_bet
-                    job_analyze_and_bet()
-                    st.toast("Analyse terminée — voir les prédictions du jour.")
-                except Exception as exc:
-                    st.error(f"Erreur: {exc}")
-            st.rerun()
-    with col_b:
-        if st.button("⚖️ Régler les résultats", use_container_width=True):
-            with st.spinner("Règlement en cours…"):
-                try:
-                    from betbot.scheduler.jobs import job_settle_results
-                    job_settle_results()
-                    st.toast("Règlement terminé.")
-                except Exception as exc:
-                    st.error(f"Erreur: {exc}")
-            st.rerun()
-    with col_c:
-        if st.button("📊 Recalculer Elo", use_container_width=True):
-            with st.spinner("Recalcul Elo en cours…"):
-                try:
-                    from betbot.scheduler.jobs import job_recompute_elo
-                    job_recompute_elo()
-                    st.toast("Elo mis à jour.")
-                except Exception as exc:
-                    st.error(f"Erreur: {exc}")
-            st.rerun()
-
-    col_d, col_e = st.columns([1, 1])
-    with col_d:
-        if st.button("🗑️ Vider le cache API", use_container_width=True):
-            try:
-                from betbot.data.cache import _raw_connect
-                conn = _raw_connect()
-                cur = conn.execute("DELETE FROM api_cache")
-                deleted = cur.rowcount
-                conn.commit()
-                conn.close()
-                st.success(f"Cache vidé — {deleted} entrées supprimées.")
-            except Exception as exc:
-                st.error(f"Erreur: {exc}")
-    with col_e:
-        if st.button("⚠️ Reset complet", use_container_width=True):
-            if st.session_state.get("reset_confirm"):
-                try:
-                    from betbot.db.repository import execute as db_exec
-                    db_exec("DELETE FROM bets")
-                    db_exec("DELETE FROM predictions")
-                    db_exec("DELETE FROM bankroll_log")
-                    db_exec("DELETE FROM settings WHERE key='bankroll_current'")
-                    db_exec(
-                        "INSERT INTO bankroll_log (balance, event, notes) VALUES (?, 'init', 'Reset manuel')",
-                        (settings.BANKROLL_START,),
-                    )
-                    db_exec(
-                        "INSERT INTO settings (key, value) VALUES ('bankroll_current', ?)",
-                        (str(settings.BANKROLL_START),),
-                    )
-                    st.session_state.reset_confirm = False
-                    st.success(f"Reset effectué — bankroll remise à {settings.BANKROLL_START:.0f}€.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Erreur: {exc}")
-            else:
-                st.session_state.reset_confirm = True
-                st.warning("Clique à nouveau pour confirmer — toutes les données seront effacées.")
-
-    st.divider()
-    st.subheader("État du système")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.caption("**Calendrier des jobs**")
-        st.code("""
-00:00 Europe/Brussels — Analyse & paris du jour
-06:00 — Recalcul Elo ratings
-23:00 — Règlement des résultats
-        """, language="yaml")
-    with c2:
-        st.caption("**Pages**")
-        st.markdown("""
-        - 📊 Vue d'ensemble : KPIs globaux
-        - ⚽ Prédictions du jour : prédictions en cours
-        - 💰 Historique : tous les paris
-        - 📈 Statistiques : ROI par marché/ligue
-        """)
-
-    st.divider()
+    st.caption(
+        "Pages : "
+        "📊 Vue d'ensemble · "
+        "🔍 Données brutes (chaque match + cotes par bookmaker)"
+    )
     st.caption(f"Dernière mise à jour: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 

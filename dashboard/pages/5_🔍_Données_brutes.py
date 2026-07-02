@@ -1,8 +1,11 @@
-"""Page 5: Données brutes par match — inspection complète de chaque feature, cote, blessure."""
+"""Page 5: Raw scraped data — every match + every bookmaker + every score.
+
+This page is the entire purpose of the bot: show what we've actually
+collected from the APIs, with no predictions, no model, no bets.
+"""
 from __future__ import annotations
 
-import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -14,259 +17,213 @@ if not check_auth():
     st.stop()
 
 st.set_page_config(page_title="Données brutes", page_icon="🔍", layout="wide")
-st.title("🔍 Données brutes par match")
+st.title("🔍 Données brutes")
+st.caption("Tout ce que le bot a scrapé. Pas de modèle, pas de pari — juste les données.")
+
 
 # ---------------------------------------------------------------------------
-# Date + match selector
+# Filters
 # ---------------------------------------------------------------------------
-selected_date = st.date_input("Date", value=datetime.today().date())
+
+f1, f2, f3 = st.columns([1, 1, 2])
+with f1:
+    days_back = st.selectbox("Période", [1, 2, 3, 7, 14, 30], index=2,
+                             format_func=lambda d: f"{d} jour(s)")
+with f2:
+    league_filter = st.selectbox(
+        "Ligue",
+        ["Toutes"] + [r["name"] for r in query(
+            "SELECT DISTINCT l.name FROM leagues l "
+            "JOIN matches m ON m.league_id = l.league_id "
+            "ORDER BY l.name"
+        )],
+    )
+with f3:
+    status_filter = st.multiselect(
+        "Statut",
+        ["NS", "1H", "HT", "2H", "FT", "AET", "PEN"],
+        default=["NS", "FT", "AET", "PEN"],
+    )
+
+# ---------------------------------------------------------------------------
+# Big matches table
+# ---------------------------------------------------------------------------
+
+since = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+params: list = [since]
+where_extra = ""
+if league_filter != "Toutes":
+    where_extra += " AND l.name = ?"
+    params.append(league_filter)
+if status_filter:
+    placeholders = ",".join("?" * len(status_filter))
+    where_extra += f" AND m.status IN ({placeholders})"
+    params.extend(status_filter)
 
 matches = query(
-    """
-    SELECT m.match_id, m.match_date, m.league_id, m.season,
-           t1.name AS home_team, t2.name AS away_team,
-           m.home_score, m.away_score, m.status, m.referee, m.venue
+    f"""
+    SELECT m.match_id, m.match_date,
+           l.name AS league, m.season,
+           th.name AS home_team, ta.name AS away_team,
+           m.status, m.home_score, m.away_score,
+           m.home_ht_score, m.away_ht_score,
+           m.home_score_regular, m.away_score_regular,
+           m.home_score_et, m.away_score_et,
+           m.home_score_pen, m.away_score_pen,
+           m.match_duration, m.match_winner
     FROM matches m
-    LEFT JOIN teams t1 ON t1.team_id = m.home_team_id
-    LEFT JOIN teams t2 ON t2.team_id = m.away_team_id
-    WHERE date(m.match_date) = date(?)
-    ORDER BY m.match_date
+    LEFT JOIN teams th ON th.team_id = m.home_team_id
+    LEFT JOIN teams ta ON ta.team_id = m.away_team_id
+    LEFT JOIN leagues l ON l.league_id = m.league_id
+    WHERE date(m.match_date) >= date(?)
+    {where_extra}
+    ORDER BY m.match_date DESC
     """,
-    (selected_date.isoformat(),),
+    tuple(params),
 )
 
 if not matches:
-    st.info(f"Aucun match enregistré pour le {selected_date}.")
-    st.caption("Les matchs sont enregistrés lors du pipeline quotidien (00h00).")
+    st.info(f"Aucun match pour ces filtres.")
     st.stop()
 
+df = pd.DataFrame([dict(r) for r in matches])
+
+
+def _fmt_score(row):
+    h, a = row.get("home_score"), row.get("away_score")
+    if h is None or a is None:
+        return "—"
+    reg_h = row.get("home_score_regular")
+    reg_a = row.get("away_score_regular")
+    et_h, et_a = row.get("home_score_et") or 0, row.get("away_score_et") or 0
+    pen_h, pen_a = row.get("home_score_pen") or 0, row.get("away_score_pen") or 0
+    dur = row.get("match_duration")
+    if dur == "PENALTY_SHOOTOUT" and reg_h is not None:
+        return f"{reg_h}-{reg_a} → {h}-{a} (tab {pen_h}-{pen_a})"
+    if dur == "EXTRA_TIME" and reg_h is not None and (reg_h, reg_a) != (h, a):
+        return f"{reg_h}-{reg_a} → {h}-{a} (a.p.)"
+    return f"{h}-{a}"
+
+
+def _fmt_status(row):
+    s = row.get("status") or "—"
+    if s in ("FT", "AET", "PEN"):
+        return f"✓ {s}"
+    if s in ("1H", "2H", "HT"):
+        return f"🟢 {s} live"
+    return f"⏳ {s}"
+
+
+df["Score"] = df.apply(_fmt_score, axis=1)
+df["Statut"] = df.apply(_fmt_status, axis=1)
+df["Date"] = pd.to_datetime(df["match_date"]).dt.strftime("%d/%m %H:%M")
+df["Winner"] = df["match_winner"].fillna("—")
+
+display = df[["Date", "league", "home_team", "away_team", "Score", "Statut", "Winner"]].copy()
+display.columns = ["Date", "Ligue", "Domicile", "Extérieur", "Score", "Statut", "Vainqueur"]
+st.caption(f"{len(display)} match(s)")
+st.dataframe(display, use_container_width=True, hide_index=True, height=420)
+
+
+# ---------------------------------------------------------------------------
+# Match drill-down: odds, breakdown
+# ---------------------------------------------------------------------------
+
+st.divider()
+st.subheader("Détail d'un match")
+
 match_labels = {
-    f"{r['home_team']} vs {r['away_team']}  [id:{r['match_id']}]": dict(r)
-    for r in matches
+    f"{r['Date']} — {r['home_team']} vs {r['away_team']}  [{r['status']}]": r["match_id"]
+    for _, r in df.iterrows()
 }
-chosen_label = st.selectbox("Match", list(match_labels.keys()))
-match = match_labels[chosen_label]
-match_id = match["match_id"]
+if not match_labels:
+    st.stop()
 
-# ---------------------------------------------------------------------------
-# Match header
-# ---------------------------------------------------------------------------
+chosen = st.selectbox("Match", list(match_labels.keys()))
+match_id = match_labels[chosen]
+
+# Header
+header_row = df[df["match_id"] == match_id].iloc[0]
+hc1, hc2, hc3, hc4 = st.columns(4)
+hc1.metric("Domicile", header_row["home_team"])
+hc2.metric("Score", header_row["Score"] or "—")
+hc3.metric("Extérieur", header_row["away_team"])
+hc4.metric("Statut", f"{header_row['status']} ({header_row.get('match_duration') or '—'})")
+
+# Odds comparison across bookmakers
 st.divider()
-home = match["home_team"] or "?"
-away = match["away_team"] or "?"
-st.subheader(f"{home}  —  {away}")
-
-c1, c2, c3, c4, c5 = st.columns(5)
-raw_date = match["match_date"] or ""
-try:
-    nice_date = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00")).strftime("%d/%m %H:%M")
-except (ValueError, TypeError):
-    nice_date = str(raw_date)
-
-c1.metric("Date", nice_date)
-c2.metric("Statut", match["status"] or "—")
-score = (
-    f"{match['home_score']} - {match['away_score']}"
-    if match["home_score"] is not None
-    else "À venir"
-)
-c3.metric("Score", score)
-c4.metric("Arbitre", match["referee"] or "N/A")
-c5.metric("Stade", match["venue"] or "N/A")
-
-# ---------------------------------------------------------------------------
-# Prédictions du modèle
-# ---------------------------------------------------------------------------
-st.divider()
-st.subheader("📊 Prédictions du modèle")
-
-preds = query(
-    """
-    SELECT market, selection, prob_model, confidence, best_odds, best_bookmaker,
-           value, weighted_score, ml_score, features_json, created_at
-    FROM predictions
-    WHERE match_id = ?
-    ORDER BY confidence DESC
-    """,
-    (match_id,),
-)
-
-features: dict | None = None
-
-if preds:
-    df_preds = pd.DataFrame([dict(r) for r in preds])
-    display_cols = [c for c in [
-        "market", "selection", "prob_model", "confidence",
-        "best_odds", "best_bookmaker", "value", "weighted_score", "ml_score",
-    ] if c in df_preds.columns]
-
-    def _fmt(df: pd.DataFrame) -> pd.DataFrame:
-        for col in ("prob_model", "confidence", "weighted_score", "ml_score", "value"):
-            if col in df.columns:
-                df[col] = df[col].apply(lambda x: f"{x:.2%}" if x is not None else "—")
-        if "best_odds" in df.columns:
-            df["best_odds"] = df["best_odds"].apply(lambda x: f"{x:.2f}" if x is not None else "—")
-        return df
-
-    st.dataframe(
-        _fmt(df_preds[display_cols].copy()),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    raw_json = preds[0]["features_json"]
-    if raw_json:
-        try:
-            features = json.loads(raw_json)
-        except (json.JSONDecodeError, TypeError):
-            features = None
-else:
-    st.info("Aucune prédiction enregistrée pour ce match.")
-
-# ---------------------------------------------------------------------------
-# Feature breakdown
-# ---------------------------------------------------------------------------
-st.divider()
-st.subheader("🧩 Détail des features")
-
-if features:
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Δ Home", f"{features.get('delta_home', 0):+.4f}")
-    m2.metric("Δ Draw", f"{features.get('delta_draw', 0):+.4f}")
-    m3.metric("Δ Away", f"{features.get('delta_away', 0):+.4f}")
-    m4.metric("Confiance globale", f"{features.get('confidence', 0):.2%}")
-
-    missing = features.get("missing_features", [])
-    if missing:
-        st.warning(f"Features sans données : {', '.join(missing)}")
-
-    breakdown = features.get("breakdown", {})
-    if breakdown:
-        st.markdown("---")
-        st.caption("Cliquer sur une feature pour voir le détail complet")
-
-        for feat_name, feat_data in sorted(breakdown.items()):
-            is_missing = feat_data.get("missing", False)
-            icon = "⚠️" if is_missing else "✅"
-
-            if not is_missing:
-                delta = feat_data.get("delta", [0.0, 0.0, 0.0])
-                conf = feat_data.get("confidence", 0.0)
-                weight = feat_data.get("weight", 0.0)
-                header = (
-                    f"{icon} **{feat_name}** — "
-                    f"conf={conf:.0%} · poids={weight:.0%} · "
-                    f"Δhome={delta[0]:+.3f} · Δdraw={delta[1]:+.3f} · Δaway={delta[2]:+.3f}"
-                )
-            else:
-                header = f"{icon} **{feat_name}** — données manquantes"
-
-            with st.expander(header, expanded=False):
-                if not is_missing:
-                    d = feat_data.get("delta", [0.0, 0.0, 0.0])
-                    fc1, fc2, fc3, fc4 = st.columns(4)
-                    fc1.metric("Δ Home", f"{d[0]:+.4f}")
-                    fc2.metric("Δ Draw", f"{d[1]:+.4f}")
-                    fc3.metric("Δ Away", f"{d[2]:+.4f}")
-                    fc4.metric("Confiance", f"{feat_data.get('confidence', 0):.2%}")
-
-                raw = feat_data.get("raw", {})
-                if raw:
-                    st.json(raw)
-else:
-    st.info("Aucune donnée feature disponible pour ce match.")
-
-# ---------------------------------------------------------------------------
-# Cotes du marché
-# ---------------------------------------------------------------------------
-st.divider()
-st.subheader("💹 Cotes du marché")
+st.subheader("💹 Cotes par bookmaker")
 
 odds_rows = query(
     """
     SELECT bookmaker, market, selection, odds, implied_prob, fetched_at
     FROM odds_history
     WHERE match_id = ?
-    ORDER BY market, selection, odds DESC
+    ORDER BY market, selection, bookmaker, odds DESC
     """,
     (match_id,),
 )
 
 if odds_rows:
     df_odds = pd.DataFrame([dict(r) for r in odds_rows])
-    available_markets = sorted(df_odds["market"].unique().tolist())
-    selected_markets = st.multiselect(
-        "Filtrer par marché",
-        options=available_markets,
-        default=available_markets,
-    )
-    df_filtered = df_odds[df_odds["market"].isin(selected_markets)]
-    if "implied_prob" in df_filtered.columns:
-        df_filtered = df_filtered.copy()
-        df_filtered["implied_prob"] = df_filtered["implied_prob"].apply(
-            lambda x: f"{x:.2%}" if x is not None else "—"
+    markets_avail = sorted(df_odds["market"].unique().tolist())
+    chosen_markets = st.multiselect("Filtrer marchés", markets_avail, default=markets_avail)
+    df_odds = df_odds[df_odds["market"].isin(chosen_markets)]
+
+    if df_odds.empty:
+        st.info("Aucun résultat pour les marchés sélectionnés.")
+    else:
+        # Pivot: for each market+selection, show odds from each bookmaker
+        pivot = df_odds.pivot_table(
+            index=["market", "selection"],
+            columns="bookmaker",
+            values="odds",
+            aggfunc="max",
         )
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
-    st.caption(f"{len(df_filtered)} entrées · {df_odds['bookmaker'].nunique()} bookmakers")
+        # Add best-odds column
+        pivot["BEST"] = pivot.max(axis=1)
+        pivot["% implied"] = (1 / pivot["BEST"]).map(lambda x: f"{x:.1%}")
+        pivot = pivot.reset_index()
+        st.dataframe(pivot, use_container_width=True, hide_index=True)
+        st.caption(f"{len(odds_rows)} entrées · {df_odds['bookmaker'].nunique()} bookmaker(s)")
+
+        # Best-odds summary per market
+        st.markdown("**Meilleure cote par marché/sélection :**")
+        best = (
+            df_odds.sort_values("odds", ascending=False)
+            .groupby(["market", "selection"], as_index=False)
+            .first()[["market", "selection", "bookmaker", "odds", "implied_prob"]]
+        )
+        best["implied_prob"] = best["implied_prob"].map(
+            lambda x: f"{x:.1%}" if x is not None else "—"
+        )
+        best.columns = ["Marché", "Sélection", "Bookmaker", "Cote", "Prob. implicite"]
+        st.dataframe(best, use_container_width=True, hide_index=True)
 else:
     st.info("Aucune cote enregistrée pour ce match.")
 
+
 # ---------------------------------------------------------------------------
-# Blessures / Suspensions
+# KPI footer
 # ---------------------------------------------------------------------------
+
 st.divider()
-st.subheader("🏥 Blessures & Suspensions")
+kpi = query("""
+    SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status='FT' THEN 1 ELSE 0 END) AS ft,
+        SUM(CASE WHEN status IN ('NS','1H','2H','HT') THEN 1 ELSE 0 END) AS upcoming,
+        COUNT(DISTINCT league_id) AS leagues
+    FROM matches
+    WHERE date(match_date) >= date(?)
+""", (since,))[0]
 
-injuries = query(
-    """
-    SELECT t.name AS equipe, i.player_name AS joueur, i.reason AS raison,
-           i.importance, i.expected_return AS retour
-    FROM injuries i
-    LEFT JOIN teams t ON t.team_id = i.team_id
-    WHERE i.fixture_id = ?
-    ORDER BY t.name, i.importance DESC
-    """,
-    (match_id,),
-)
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Matchs (période)", kpi["total"] or 0)
+k2.metric("Terminés", kpi["ft"] or 0)
+k3.metric("À venir / live", kpi["upcoming"] or 0)
+k4.metric("Ligues", kpi["leagues"] or 0)
 
-if injuries:
-    df_inj = pd.DataFrame([dict(r) for r in injuries])
-    st.dataframe(df_inj, use_container_width=True, hide_index=True)
-else:
-    st.info("Aucune blessure enregistrée pour ce match.")
-
-# ---------------------------------------------------------------------------
-# Paris placés
-# ---------------------------------------------------------------------------
-st.divider()
-st.subheader("🎯 Paris placés sur ce match")
-
-bets = query(
-    """
-    SELECT market, selection, odds, bookmaker, stake, confidence, value,
-           status, profit, placed_at, settled_at
-    FROM bets
-    WHERE match_id = ?
-    ORDER BY placed_at
-    """,
-    (match_id,),
-)
-
-if bets:
-    df_bets = pd.DataFrame([dict(r) for r in bets])
-    for col in ("confidence", "value"):
-        if col in df_bets.columns:
-            df_bets[col] = df_bets[col].apply(lambda x: f"{x:.2%}" if x is not None else "—")
-    st.dataframe(df_bets, use_container_width=True, hide_index=True)
-else:
-    st.info("Aucun pari placé sur ce match.")
-
-# ---------------------------------------------------------------------------
-# JSON brut complet (debug)
-# ---------------------------------------------------------------------------
-st.divider()
-with st.expander("🛠️ JSON brut complet (debug)", expanded=False):
-    if features:
-        st.json(features)
-    else:
-        st.info("Aucune donnée JSON disponible.")
+n_odds = query("SELECT COUNT(*) AS c FROM odds_history")[0]["c"] or 0
+n_teams = query("SELECT COUNT(*) AS c FROM teams")[0]["c"] or 0
+st.caption(f"Base : {n_odds} cotes · {n_teams} équipes indexées · scraper tourne en cron toutes les 6h")

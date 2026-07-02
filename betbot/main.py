@@ -1,7 +1,11 @@
-"""Betbot entry point.
+"""Betbot entry point — scraper daemon.
 
-Starts the scheduler and keeps the bot process alive.
-The dashboard is a separate docker-compose service that runs Streamlit.
+The bot is now a pure data scraper: it pulls fixtures, odds, and
+results from public APIs and stores them in SQLite. The dashboard
+displays everything. There is no model, no prediction, no betting.
+
+Starts the scheduler and keeps the bot process alive. The dashboard
+is a separate docker-compose service that runs Streamlit.
 """
 from __future__ import annotations
 
@@ -25,11 +29,9 @@ def _handle_signal(signum, _frame) -> None:  # noqa: ANN001
 def main() -> None:
     setup_logging()
     log.info("=" * 60)
-    log.info("Betbot starting")
-    log.info("Bankroll start: %.2f € | Bet size: %.2f €", settings.BANKROLL_START, settings.BET_SIZE)
+    log.info("Betbot scraper starting")
     log.info("Timezone: %s", settings.TIMEZONE)
-    log.info("Confidence threshold: %.2f | Value threshold: %.2f",
-             settings.CONFIDENCE_THRESHOLD, settings.VALUE_THRESHOLD)
+    log.info("Target leagues: %d", len(settings.TARGET_LEAGUES))
     log.info("=" * 60)
 
     init_db()
